@@ -1,0 +1,357 @@
+{
+  "version": "1.0",
+  "total_questions": 25,
+  "core_questions": [
+    {
+      "id": 1,
+      "category": "协作模式",
+      "question": "你希望 AI 之间如何协作？",
+      "options": [
+        {
+          "label": "动态自适应（Agent 自主决策委派）",
+          "value": "dynamic_adaptive",
+          "description": "类似 Oh My OpenCode，Agent 可以主动请求其他 Agent 协助"
+        },
+        {
+          "label": "静态依赖图（预定义任务依赖）",
+          "value": "static_dependency",
+          "description": "类似 CC-MIRROR，预定义任务图和依赖关系"
+        },
+        {
+          "label": "混合模式（顶层静态 + 底层动态）",
+          "value": "hybrid",
+          "description": "顶层规划使用静态依赖，底层执行允许动态协作"
+        }
+      ],
+      "default": "dynamic_adaptive",
+      "required": true
+    },
+    {
+      "id": 2,
+      "category": "自动化程度",
+      "question": "你希望 AI 有多大的自主权？",
+      "options": [
+        {
+          "label": "完全自主（类似 Oh My OpenCode）",
+          "value": "full_autonomy",
+          "description": "AI 可以自主修复、切换方案、重启进程、调用外部 Agent"
+        },
+        {
+          "label": "有限自主（只能尝试预定义方案）",
+          "value": "limited_autonomy",
+          "description": "AI 只能从预定义的修复方案中选择，不能自由发挥"
+        },
+        {
+          "label": "保守模式（最多 3 次尝试）",
+          "value": "conservative",
+          "description": "AI 尝试 3 次后如果仍然失败，立即上报人工"
+        }
+      ],
+      "default": "full_autonomy",
+      "required": true
+    },
+    {
+      "id": 3,
+      "category": "自动化程度",
+      "question": "对于简单的任务（T1/T2），你希望 AI：",
+      "options": [
+        {
+          "label": "直接执行，无需确认",
+          "value": "auto_execute",
+          "description": "减少中断，T1/T2 任务零人工参与"
+        },
+        {
+          "label": "执行前简要说明",
+          "value": "brief_notify",
+          "description": "执行前快速说明计划，但不等待确认"
+        },
+        {
+          "label": "等待确认后执行",
+          "value": "wait_confirm",
+          "description": "所有任务都需要用户确认后才执行"
+        }
+      ],
+      "default": "auto_execute",
+      "required": true
+    },
+    {
+      "id": 4,
+      "category": "错误处理",
+      "question": "当 AI 犯错时，你希望它：",
+      "options": [
+        {
+          "label": "记录错误并调整策略",
+          "value": "learn_and_adapt",
+          "description": "类似强化学习，记录错误模式，下次避免重蹈覆辙"
+        },
+        {
+          "label": "立即回滚到上一个稳定状态",
+          "value": "immediate_rollback",
+          "description": "优先保证稳定性，出错后立即回滚"
+        },
+        {
+          "label": "暂停任务，等待人工指导",
+          "value": "wait_for_human",
+          "description": "出错后暂停，等待人工指示下一步操作"
+        }
+      ],
+      "default": "learn_and_adapt",
+      "required": true
+    },
+    {
+      "id": 5,
+      "category": "沟通偏好",
+      "question": "你希望 AI 如何向你汇报？",
+      "options": [
+        {
+          "label": "简洁明了（关键信息 + 结果）",
+          "value": "concise",
+          "description": "只汇报关键信息和最终结果，不啰嗦"
+        },
+        {
+          "label": "详细报告（过程 + 结果 + 建议）",
+          "value": "detailed",
+          "description": "提供完整的执行过程、结果分析和下一步建议"
+        },
+        {
+          "label": "按需汇报（有问题时才汇报）",
+          "value": "on_demand",
+          "description": "正常情况不汇报，只有遇到问题时才主动联系"
+        }
+      ],
+      "default": "concise",
+      "required": true
+    }
+  ],
+  "additional_questions": [
+    {
+      "id": 6,
+      "category": "技术偏好",
+      "question": "你偏好的前端技术栈？",
+      "options": [
+        { "label": "React", "value": "react" },
+        { "label": "Vue", "value": "vue" },
+        { "label": "Svelte", "value": "svelte" },
+        { "label": "无所谓，AI 自行决定", "value": "auto" }
+      ],
+      "default": "react"
+    },
+    {
+      "id": 7,
+      "category": "技术偏好",
+      "question": "你偏好的后端技术栈？",
+      "options": [
+        { "label": "FastAPI (Python)", "value": "fastapi" },
+        { "label": "Express (Node.js)", "value": "express" },
+        { "label": "Next.js API", "value": "nextjs" },
+        { "label": "无所谓，AI 自行决定", "value": "auto" }
+      ],
+      "default": "fastapi"
+    },
+    {
+      "id": 8,
+      "category": "技术偏好",
+      "question": "你偏好的数据库？",
+      "options": [
+        { "label": "PostgreSQL", "value": "postgresql" },
+        { "label": "MongoDB", "value": "mongodb" },
+        { "label": "SQLite", "value": "sqlite" },
+        { "label": "无所谓，AI 自行决定", "value": "auto" }
+      ],
+      "default": "postgresql"
+    },
+    {
+      "id": 9,
+      "category": "工作流偏好",
+      "question": "你偏好的工作流模式？",
+      "options": [
+        { "label": "ultrawork（火力全开并行）", "value": "ultrawork" },
+        { "label": "ralph_loop（自动迭代）", "value": "ralph_loop" },
+        { "label": "zero_touch（零干预）", "value": "zero_touch" },
+        { "label": "标准 TDD 流程", "value": "tdd" }
+      ],
+      "default": "ultrawork"
+    },
+    {
+      "id": 10,
+      "category": "质量标准",
+      "question": "你期望的测试覆盖率？",
+      "options": [
+        { "label": "80%（标准）", "value": 80 },
+        { "label": "90%（高）", "value": 90 },
+        { "label": "95%（极高）", "value": 95 },
+        { "label": "100%（完美主义）", "value": 100 }
+      ],
+      "default": 80
+    },
+    {
+      "id": 11,
+      "category": "AI 协作",
+      "question": "你希望如何调用 GPT（Oracle）？",
+      "options": [
+        { "label": "复杂问题自动调用", "value": "auto" },
+        { "label": "手动调用（明确指定）", "value": "manual" },
+        { "label": "Ask @oracle 模式", "value": "ask_oracle" }
+      ],
+      "default": "ask_oracle"
+    },
+    {
+      "id": 12,
+      "category": "AI 协作",
+      "question": "你希望如何使用 Gemini（Frontend）？",
+      "options": [
+        { "label": "前端开发专用", "value": "frontend_only" },
+        { "label": "代码审查专用", "value": "review_only" },
+        { "label": "前端 + 审查", "value": "both" }
+      ],
+      "default": "both"
+    },
+    {
+      "id": 13,
+      "category": "代码风格",
+      "question": "你偏好的命名规范？",
+      "options": [
+        { "label": "camelCase（变量/函数）", "value": "camelCase" },
+        { "label": "snake_case（变量/函数）", "value": "snake_case" },
+        { "label": "无所谓，遵循项目规范", "value": "follow_project" }
+      ],
+      "default": "camelCase"
+    },
+    {
+      "id": 14,
+      "category": "代码风格",
+      "question": "你对代码注释的态度？",
+      "options": [
+        { "label": "关键逻辑必须注释", "value": "critical_only" },
+        { "label": "详细注释（自文档化）", "value": "detailed" },
+        { "label": "代码即文档，尽量少注释", "value": "minimal" }
+      ],
+      "default": "critical_only"
+    },
+    {
+      "id": 15,
+      "category": "Git 工作流",
+      "question": "你希望的 commit 策略？",
+      "options": [
+        { "label": "原子提交（≤50 行/次）", "value": "atomic" },
+        { "label": "功能提交（完成一个功能再提交）", "value": "feature" },
+        { "label": "无所谓，AI 自行决定", "value": "auto" }
+      ],
+      "default": "atomic"
+    },
+    {
+      "id": 16,
+      "category": "多 AI 协作",
+      "question": "对于 T3/T4 任务，你希望：",
+      "options": [
+        { "label": "必须使用 Codex + Gemini", "value": "required" },
+        { "label": "优先使用，但可选", "value": "preferred" },
+        { "label": "AI 自行决定是否使用", "value": "auto" }
+      ],
+      "default": "required"
+    },
+    {
+      "id": 17,
+      "category": "安全优先级",
+      "question": "对于安全敏感的操作（删除、修改凭证），你希望：",
+      "options": [
+        { "label": "强制确认", "value": "force_confirm" },
+        { "label": "自动备份后执行", "value": "backup_then_execute" },
+        { "label": "AI 自行判断风险", "value": "auto_assess" }
+      ],
+      "default": "force_confirm"
+    },
+    {
+      "id": 18,
+      "category": "沙盒测试",
+      "question": "对于优化和测试，你希望：",
+      "options": [
+        { "label": "强制使用 Git Worktree 隔离", "value": "force_sandbox" },
+        { "label": "AI 自行决定是否隔离", "value": "auto" },
+        { "label": "不需要隔离", "value": "no_sandbox" }
+      ],
+      "default": "force_sandbox"
+    },
+    {
+      "id": 19,
+      "category": "自动化频率",
+      "question": "你希望多久进行一次自动优化？",
+      "options": [
+        { "label": "每天", "value": "daily" },
+        { "label": "每周", "value": "weekly" },
+        { "label": "每两周", "value": "biweekly" },
+        { "label": "手动触发", "value": "manual" }
+      ],
+      "default": "daily"
+    },
+    {
+      "id": 20,
+      "category": "反馈方式",
+      "question": "你希望如何提供反馈？",
+      "options": [
+        { "label": "显式评分（1-5 星）", "value": "rating" },
+        { "label": "接受/修改建议", "value": "implicit" },
+        { "label": "自然语言描述", "value": "natural_language" },
+        { "label": "混合方式", "value": "hybrid" }
+      ],
+      "default": "hybrid"
+    },
+    {
+      "id": 21,
+      "category": "语言偏好",
+      "question": "你希望 AI 使用什么语言与你沟通？",
+      "options": [
+        { "label": "简体中文（优先）", "value": "zh" },
+        { "label": "英文（优先）", "value": "en" },
+        { "label": "根据任务自动选择", "value": "auto" }
+      ],
+      "default": "zh"
+    },
+    {
+      "id": 22,
+      "category": "奖励权重",
+      "question": "初期阶段，你更重视？",
+      "options": [
+        { "label": "即时奖励（任务完成质量）70%", "value": "immediate" },
+        { "label": "长期优化（能力提升）70%", "value": "long_term" },
+        { "label": "平衡（各 50%）", "value": "balanced" }
+      ],
+      "default": "immediate"
+    },
+    {
+      "id": 23,
+      "category": "Agent 选择",
+      "question": "对于架构设计，你更信任？",
+      "options": [
+        { "label": "GPT (Oracle)", "value": "oracle" },
+        { "label": "Claude (Librarian)", "value": "librarian" },
+        { "label": "AI 自行决定", "value": "auto" }
+      ],
+      "default": "oracle"
+    },
+    {
+      "id": 24,
+      "category": "Agent 选择",
+      "question": "对于前端开发，你更信任？",
+      "options": [
+        { "label": "Gemini (Frontend)", "value": "gemini" },
+        { "label": "Claude (Librarian)", "value": "librarian" },
+        { "label": "AI 自行决定", "value": "auto" }
+      ],
+      "default": "gemini"
+    },
+    {
+      "id": 25,
+      "category": "个人雷区",
+      "question": "你最讨厌 AI 做什么？（可多选）",
+      "options": [
+        { "label": "自作主张添加功能", "value": "feature_creep" },
+        { "label": "过度询问（问太多问题）", "value": "too_many_questions" },
+        { "label": "不解释直接执行", "value": "no_explanation" },
+        { "label": "代码太长太复杂", "value": "overly_complex" }
+      ],
+      "default": [],
+      "multiple": true
+    }
+  ]
+}

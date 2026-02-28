@@ -1,0 +1,49 @@
+# 个人配置文件（不应该提交）
+*.bak
+*.backup
+*.backup.*
+personal-settings.json
+user-preferences.json
+
+# 日志文件
+logs/
+*.log
+
+# 临时文件
+tmp/
+temp/
+*.tmp
+
+# 系统文件
+.DS_Store
+Thumbs.db
+
+# 编辑器
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# 备份文件
+backups/*
+!backups/.gitkeep
+!backups/optimization-log.json
+
+# Node modules (如果有)
+node_modules/
+
+# Python (如果有)
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# 测试覆盖率
+coverage/
+.nyc_output/
+
+# 构建产物
+dist/
+build/

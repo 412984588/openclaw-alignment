@@ -1,0 +1,25 @@
+{
+  "version": "1.0",
+  "last_checks": {
+    "daily_optimization": null,
+    "weekly_pruning": null
+  },
+  "statistics": {
+    "task_count": 0,
+    "successful_tasks": 0,
+    "failed_tasks": 0,
+    "auto_fix_attempts": 0,
+    "auto_fix_successes": 0
+  },
+  "stage": "early_stage",
+  "mode": "deep",
+  "profile": {
+    "created_at": "2026-02-28T00:00:00Z",
+    "last_updated": "2026-02-28T00:00:00Z",
+    "questions_answered": 0,
+    "total_questions": 20,
+    "completion_percentage": 0
+  },
+  "optimization_history": [],
+  "last_backup": null
+}

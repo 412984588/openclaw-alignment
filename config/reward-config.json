@@ -1,0 +1,116 @@
+{
+  "version": "1.0",
+  "enabled": true,
+  "weights": {
+    "objective_metrics": 0.4,
+    "user_behavior": 0.3,
+    "explicit_feedback": 0.2,
+    "behavior_pattern": 0.1
+  },
+  "objective_metrics": {
+    "test_coverage": {
+      "weight": 0.3,
+      "target": 80,
+      "bonus_threshold": 90
+    },
+    "code_quality": {
+      "weight": 0.25,
+      "target": 7.5,
+      "max": 10
+    },
+    "bug_count": {
+      "weight": 0.2,
+      "target": 0,
+      "penalty_per_bug": 0.5
+    },
+    "task_duration": {
+      "weight": 0.15,
+      "baseline": 300,
+      "improvement_bonus": 0.1
+    },
+    "auto_fix_success": {
+      "weight": 0.1,
+      "target": 0.8,
+      "bonus_threshold": 0.9
+    }
+  },
+  "user_behavior": {
+    "accept_suggestion": {
+      "weight": 0.4,
+      "bonus_threshold": 0.8
+    },
+    "modify_suggestion": {
+      "weight": 0.3,
+      "neutral_threshold": 0.3
+    },
+    "rewrite_rate": {
+      "weight": 0.2,
+      "penalty_threshold": 0.2
+    },
+    "repeat_usage": {
+      "weight": 0.1,
+      "bonus_threshold": 5
+    }
+  },
+  "explicit_feedback": {
+    "rating": {
+      "weight": 0.6,
+      "scale": [1, 2, 3, 4, 5],
+      "bonus_threshold": 4
+    },
+    "positive_count": {
+      "weight": 0.25,
+      "bonus_multiplier": 0.1
+    },
+    "negative_count": {
+      "weight": 0.15,
+      "penalty_multiplier": 0.3
+    }
+  },
+  "behavior_pattern": {
+    "agent_selection": {
+      "oracle": 1.0,
+      "librarian": 0.9,
+      "frontend": 0.85,
+      "sisyphus": 0.95
+    },
+    "workflow_preference": {
+      "ultrawork": 1.0,
+      "ralph_loop": 0.95,
+      "zero_touch": 0.9
+    }
+  },
+  "dynamic_adjustment": {
+    "early_stage": {
+      "threshold": 10,
+      "immediate_reward": 0.7,
+      "long_term_optimization": 0.3
+    },
+    "mature_stage": {
+      "threshold": 20,
+      "immediate_reward": 0.3,
+      "long_term_optimization": 0.7
+    }
+  },
+  "strategy_adjustment": {
+    "negative_feedback_threshold": 2,
+    "weight_adjustment_factor": 0.1,
+    "record_to_soul": true
+  },
+  "optimization_triggers": {
+    "performance_decline_threshold": 0.1,
+    "user_feedback_keywords": ["做得不好", "不满意", "需要改进", "做错了"],
+    "weekly_review": true,
+    "daily_optimization": true
+  },
+  "backup": {
+    "auto_backup_before_optimization": true,
+    "backup_location": "~/.claude/backups/",
+    "retention_days": 30
+  },
+  "sandbox": {
+    "enabled": true,
+    "method": "git_worktree",
+    "location": ".worktrees/skill-test"
+  }
+}
