@@ -11,7 +11,7 @@
 
 ### 🎯 双模式支持
 
-- **深度模式**：基于历史数据（GPT 聊天记录、Claude Code 配置）自动构建用户画像
+- **深度模式**：基于历史数据（GPT 聊天记录、OpenClaw 配置）自动构建用户画像
 - **快速模式**：新设备零历史记录时，通过 25 个访谈问题快速建立画像
 
 ### 🎁 强化学习风格奖励机制
@@ -112,7 +112,7 @@ chmod +x ~/.claude/scripts/*.sh
 ### Agent 阵容
 
 - **Oracle（GPT）**：架构师和调试专家
-- **Librarian（Claude）**：文档管理和代码库查询专家
+- **Librarian（OpenClaw）**：文档管理和代码库查询专家
 - **Frontend（Gemini）**：前端开发专家
 - **Sisyphus（协调器）**：任务编排与质量管理
 
@@ -225,7 +225,7 @@ openclaw-alignment/
 
 - [OpenClaw](https://openclaw.dev) - 强大的 AI 协作平台
 - [Oh My OpenCode](https://github.com/example) - 多 Agent 编排灵感来源
-- [Anthropic Claude](https://claude.ai) - 核心 AI 能力支持
+- [Anthropic OpenClaw](https://claude.ai) - 核心 AI 能力支持
 
 ---
 

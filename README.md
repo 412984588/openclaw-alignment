@@ -311,7 +311,7 @@ cp -r ~/.claude.backup.20260228_060000 ~/.claude
 ```bash
 # 检测到历史数据
 ✅ GPT 聊天记录（~/Documents/gpt聊天记录）
-✅ Claude Code 配置（~/.claude/）
+✅ OpenClaw 配置（~/.claude/）
 ✅ OpenClaw 配置（~/.openclaw/）
 
 # 自动执行深度建模

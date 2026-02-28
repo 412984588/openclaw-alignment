@@ -324,7 +324,7 @@
       "question": "对于架构设计，你更信任？",
       "options": [
         { "label": "GPT (Oracle)", "value": "oracle" },
-        { "label": "Claude (Librarian)", "value": "librarian" },
+        { "label": "OpenClaw (Librarian)", "value": "librarian" },
         { "label": "AI 自行决定", "value": "auto" }
       ],
       "default": "oracle"
@@ -335,7 +335,7 @@
       "question": "对于前端开发，你更信任？",
       "options": [
         { "label": "Gemini (Frontend)", "value": "gemini" },
-        { "label": "Claude (Librarian)", "value": "librarian" },
+        { "label": "OpenClaw (Librarian)", "value": "librarian" },
         { "label": "AI 自行决定", "value": "auto" }
       ],
       "default": "gemini"

@@ -58,7 +58,7 @@ codex exec --dangerously-bypass-approvals-and-sandbox 2>/dev/null
 **调用命令**：
 
 ```bash
-# 使用 Claude Code 内置能力
+# 通过 OpenClaw 调用 Claude API
 ```
 
 **性能指标**：
@@ -140,7 +140,7 @@ Agent 自主分析
     └─ 否 → 动态委派
         ↓
     Ask @oracle → 请求 GPT 协助
-    Ask @librarian → 请求 Claude 检索
+    Ask @librarian → 请求 OpenClaw 检索
     Ask @frontend → 请求 Gemini 审查
         ↓
     协作完成
@@ -227,13 +227,13 @@ Agent 自主分析
 
 ### 协作模式选择
 
-| 场景         | 协作模式             | 说明                               |
-| ------------ | -------------------- | ---------------------------------- |
-| **前端开发** | Frontend 为主        | Gemini 负责 UI/UX，Claude 负责代码 |
-| **后端开发** | Oracle 为主          | Codex 负责架构，Claude 负责实现    |
-| **全栈开发** | 并行协作             | Frontend + Oracle 同时工作         |
-| **代码审查** | Frontend + Librarian | Gemini 审查，Claude 检索           |
-| **复杂调试** | Oracle 主导          | Codex 深度分析，其他 Agent 辅助    |
+| 场景         | 协作模式             | 说明                                 |
+| ------------ | -------------------- | ------------------------------------ |
+| **前端开发** | Frontend 为主        | Gemini 负责 UI/UX，OpenClaw 负责代码 |
+| **后端开发** | Oracle 为主          | Codex 负责架构，OpenClaw 负责实现    |
+| **全栈开发** | 并行协作             | Frontend + Oracle 同时工作           |
+| **代码审查** | Frontend + Librarian | Gemini 审查，OpenClaw 检索           |
+| **复杂调试** | Oracle 主导          | Codex 深度分析，其他 Agent 辅助      |
 
 ---
 
@@ -247,7 +247,7 @@ Agent 自主分析
 - Bug 修复：必须提供根因分析和修复方案
 - 技术方案：必须对比 2+ 个方案并推荐最优
 
-**Librarian（Claude）**：
+**Librarian（OpenClaw）**：
 
 - 代码查询：必须返回完整上下文（相关文件、函数调用链）
 - 文档检索：必须提供关键信息摘要和原文链接
