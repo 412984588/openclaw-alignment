@@ -18,7 +18,6 @@ import json
 from datetime import datetime
 import logging
 from functools import lru_cache
-import hashlib
 
 logger = logging.getLogger(__name__)
 
@@ -58,8 +57,9 @@ class BatchInference:
 
         self.pending_requests: List[Dict[str, Any]] = []
         self.request_counter = 0
+        self.last_batch_results: List[Tuple[int, float]] = []
 
-    def predict(self, state: np.ndarray, sync: bool = False) -> float:
+    def predict(self, state: np.ndarray, sync: bool = True) -> float:
         """
         预测（支持批量）
 
@@ -75,15 +75,15 @@ class BatchInference:
             return self._infer_single(state)
 
         # 异步模式：加入批量队列
-        result_promise = self._add_request(state)
+        request_id = self._add_request(state)
 
         # 如果队列满，执行批量推理
         if len(self.pending_requests) >= self.batch_size:
-            return self._flush_batch()[0]
+            self.last_batch_results = self._flush_batch()
 
-        return result_promise
+        return request_id
 
-    def _add_request(self, state: np.ndarray) -> float:
+    def _add_request(self, state: np.ndarray) -> int:
         """添加请求到队列"""
         request_id = self.request_counter
         self.request_counter += 1
@@ -96,8 +96,7 @@ class BatchInference:
 
         self.pending_requests.append(request)
 
-        # 占位符结果（实际结果在批量推理后更新）
-        return 0.0
+        return request_id
 
     def _infer_single(self, state: np.ndarray) -> float:
         """单个推理"""
@@ -119,7 +118,7 @@ class BatchInference:
 
         return np.array(results)
 
-    def _flush_batch(self) -> List[float]:
+    def _flush_batch(self) -> List[Tuple[int, float]]:
         """执行批量推理"""
         if not self.pending_requests:
             return []
@@ -135,14 +134,14 @@ class BatchInference:
             req["result"] = results[i]
 
         # 返回结果
-        output = [req["result"] for req in self.pending_requests]
+        output = [(req["id"], req["result"]) for req in self.pending_requests]
 
         # 清空队列
         self.pending_requests = []
 
         return output
 
-    def flush(self) -> List[float]:
+    def flush(self) -> List[Tuple[int, float]]:
         """手动刷新队列"""
         return self._flush_batch()
 
@@ -317,11 +316,10 @@ class InferenceCache:
         # 缓存统计（使用LRU缓存的内部统计）
         self.total_requests = 0
 
-    def _predict_uncached(self, state_hash: str) -> float:
+    def _predict_uncached(self, state_bytes: bytes) -> float:
         """未缓存的预测（内部方法）"""
-        # 从hash恢复状态（简化：这里假设状态可以直接从hash恢复）
-        # 实际应用中需要更复杂的序列化/反序列化
-        state = np.frombuffer(bytes.fromhex(state_hash), dtype=np.float32)
+        # 从bytes恢复状态（简化：默认float32一维向量）
+        state = np.frombuffer(state_bytes, dtype=np.float32)
 
         if hasattr(self.model, 'forward'):
             return self.model.forward(state)
@@ -344,10 +342,10 @@ class InferenceCache:
         self.total_requests += 1
 
         # 计算状态hash
-        state_hash = hashlib.md5(state.tobytes()).hexdigest()
+        state_bytes = np.asarray(state, dtype=np.float32).tobytes()
 
         # 使用LRU缓存
-        return self._cached_predict(state_hash)
+        return self._cached_predict(state_bytes)
 
     def get_cache_stats(self) -> Dict[str, Any]:
         """获取缓存统计"""

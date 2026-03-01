@@ -82,6 +82,9 @@ class RewardCalculator:
         # 奖励历史（用于训练）
         self.reward_history: List[float] = []
 
+        # 负向信号集合（归一化后反转）
+        self.negative_signals = {"bug_count", "task_time", "rewrite_rate"}
+
     def _initialize_signals(self) -> None:
         """初始化所有奖励信号"""
 
@@ -213,6 +216,16 @@ class RewardCalculator:
             self.signals["agent_preference"].weight *= 1.5
             self.signals["workflow_preference"].weight *= 1.3
 
+        self._normalize_weights()
+
+    def _normalize_weights(self) -> None:
+        """归一化权重，确保总和为1"""
+        total_weight = sum(s.weight for s in self.signals.values())
+        if total_weight == 0:
+            return
+        for signal in self.signals.values():
+            signal.weight /= total_weight
+
     def calculate_reward(self, context: Dict[str, Any]) -> float:
         """
         计算加权总奖励
@@ -233,6 +246,8 @@ class RewardCalculator:
         # 收集每个信号的奖励
         for name, signal in self.signals.items():
             signal_value = signal.collect(context)
+            if name in self.negative_signals:
+                signal_value = 1.0 - signal_value
             weighted_value = signal_value * signal.weight
 
             total_reward += weighted_value
@@ -255,7 +270,7 @@ class RewardCalculator:
         context["debug_info"]["reward_breakdown"] = reward_breakdown
         context["debug_info"]["total_reward"] = total_reward
 
-        return total_reward
+        return max(0.0, min(1.0, total_reward))
 
     def record_feedback(self, feedback_type: str, value: Any) -> None:
         """

@@ -139,13 +139,11 @@ class RLTrainer:
             # 执行步骤
             next_state, reward, done, info = self.env.step(action, task_result)
 
+            action_indices = self.agent.encode_action_indices(action)
+
             # 记录轨迹
             trajectory.states.append(state.to_vector())
-            trajectory.actions.append(action.to_vector(
-                self.env.AGENT_MAP,
-                self.env.AUTOMATION_MAP,
-                self.env.STYLE_MAP
-            ))
+            trajectory.actions.append(action_indices)
             trajectory.rewards.append(reward)
             trajectory.dones.append(done)
             trajectory.next_states.append(next_state.to_vector())
@@ -154,11 +152,7 @@ class RLTrainer:
             if self.replay_buffer:
                 exp = Experience(
                     state=state.to_vector(),
-                    action=action.to_vector(
-                        self.env.AGENT_MAP,
-                        self.env.AUTOMATION_MAP,
-                        self.env.STYLE_MAP
-                    ),
+                    action=action_indices,
                     reward=reward,
                     next_state=next_state.to_vector(),
                     done=done,
@@ -210,7 +204,7 @@ class RLTrainer:
             # 使用经验回放数据更新策略
             for i in range(len(states)):
                 state = states[i]
-                action = actions[i]
+                action_indices = actions[i]
                 reward = rewards[i]
                 next_state = next_states[i]
                 done = dones[i]
@@ -226,11 +220,7 @@ class RLTrainer:
                 advantage = target_value - current_value
 
                 # 更新Actor和Critic
-                actor_loss = self.agent.policy_net.update(
-                    state,
-                    np.argmax(action),
-                    advantage
-                )
+                actor_loss = self.agent.policy_net.update(state, action_indices, advantage)
                 critic_loss = self.agent.value_net.update(state, target_value)
 
                 total_actor_loss += actor_loss

@@ -74,6 +74,7 @@ class TrainingMonitor:
 
         # 指标记录
         self.metrics_history: Dict[str, List[Tuple[int, float]]] = {}
+        self._closed = False
 
     def log_scalar(self, tag: str, value: float, step: int):
         """
@@ -367,9 +368,10 @@ class TrainingMonitor:
 
     def close(self):
         """关闭监控器"""
-        if self.tensorboard_enabled and self.writer:
-            self.writer.close()
-            logger.info("✅ TensorBoard writer已关闭")
+        if self._closed:
+            return
+        self._safe_close_writer()
+        self._closed = True
 
         # 保存最终指标
         summary = self.get_metrics_summary()
@@ -378,6 +380,24 @@ class TrainingMonitor:
             json.dump(summary, f, indent=2)
 
         logger.info(f"✅ 监控器已关闭，指标已保存")
+
+    def _safe_close_writer(self):
+        """安全关闭writer，避免线程异常"""
+        if self.tensorboard_enabled and self.writer:
+            try:
+                self.writer.flush()
+                self.writer.close()
+                logger.info("✅ TensorBoard writer已关闭")
+            except Exception as e:
+                logger.warning(f"⚠️ 关闭TensorBoard writer失败: {e}")
+
+    def __del__(self):
+        """析构时尽量关闭writer，避免后台线程异常"""
+        try:
+            self.close()
+        except Exception:
+            # 避免析构过程中抛异常
+            pass
 
 
 class MetricsAnalyzer:

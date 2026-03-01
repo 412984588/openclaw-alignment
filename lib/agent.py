@@ -24,7 +24,7 @@ from .environment import State, Action, AgentType, AutomationLevel, Communicatio
 class Trajectory:
     """轨迹数据类"""
     states: List[np.ndarray]  # 状态序列
-    actions: List[np.ndarray]  # 动作序列
+    actions: List[np.ndarray]  # 动作序列（索引向量）
     rewards: List[float]  # 奖励序列
     dones: List[bool]  # 完成标志
     next_states: List[np.ndarray]  # 下一状态序列
@@ -44,7 +44,7 @@ class PolicyNetwork:
     Phase 2: 可选神经网络（PyTorch）
     """
 
-    def __init__(self, state_dim: int, action_dim: int, hidden_dim: int = 64):
+    def __init__(self, state_dim: int, action_dim: int = 11, hidden_dim: int = 64):
         """
         初始化策略网络
 
@@ -57,13 +57,30 @@ class PolicyNetwork:
         self.action_dim = action_dim
         self.hidden_dim = hidden_dim
 
-        # Phase 1: 线性模型参数
-        self.weights = np.random.randn(state_dim, action_dim) * 0.01
-        self.bias = np.zeros(action_dim)
+        # 多头动作空间
+        self.head_dims = {
+            "agent": 3,
+            "automation": 3,
+            "style": 3,
+            "confirm": 2
+        }
 
-    def forward(self, state: np.ndarray) -> np.ndarray:
-        """前向传播：计算logits"""
-        return state @ self.weights + self.bias
+        # Phase 1: 线性模型参数（多头）
+        self.weights = {
+            name: np.random.randn(state_dim, dim) * 0.01
+            for name, dim in self.head_dims.items()
+        }
+        self.bias = {
+            name: np.zeros(dim)
+            for name, dim in self.head_dims.items()
+        }
+
+    def forward(self, state: np.ndarray) -> Dict[str, np.ndarray]:
+        """前向传播：计算各头logits"""
+        return {
+            name: state @ self.weights[name] + self.bias[name]
+            for name in self.head_dims
+        }
 
     def softmax(self, logits: np.ndarray) -> np.ndarray:
         """Softmax激活函数"""
@@ -71,12 +88,12 @@ class PolicyNetwork:
         exp_logits = np.exp(logits - np.max(logits))
         return exp_logits / np.sum(exp_logits)
 
-    def get_action_probs(self, state: np.ndarray) -> np.ndarray:
-        """获取动作概率分布"""
+    def get_action_probs(self, state: np.ndarray) -> Dict[str, np.ndarray]:
+        """获取动作概率分布（多头）"""
         logits = self.forward(state)
-        return self.softmax(logits)
+        return {name: self.softmax(head_logits) for name, head_logits in logits.items()}
 
-    def sample_action(self, state: np.ndarray, explore: bool = True) -> Tuple[int, np.ndarray]:
+    def sample_action(self, state: np.ndarray, explore: bool = True) -> Tuple[np.ndarray, Dict[str, np.ndarray]]:
         """
         采样动作
 
@@ -85,57 +102,75 @@ class PolicyNetwork:
             explore: 是否探索（epsilon-greedy）
 
         Returns:
-            (action_index, action_probs)
+            (action_indices, action_probs)
         """
         action_probs = self.get_action_probs(state)
 
         if explore and np.random.random() < 0.1:  # 10% epsilon-greedy
-            # 随机探索
-            action_idx = np.random.randint(self.action_dim)
+            # 随机探索（每个头独立随机）
+            action_indices = np.array([
+                np.random.randint(self.head_dims["agent"]),
+                np.random.randint(self.head_dims["automation"]),
+                np.random.randint(self.head_dims["style"]),
+                np.random.randint(self.head_dims["confirm"])
+            ], dtype=int)
         else:
-            # 按概率采样
-            action_idx = np.random.choice(self.action_dim, p=action_probs)
+            # 按概率采样（每个头独立采样）
+            action_indices = np.array([
+                np.random.choice(self.head_dims["agent"], p=action_probs["agent"]),
+                np.random.choice(self.head_dims["automation"], p=action_probs["automation"]),
+                np.random.choice(self.head_dims["style"], p=action_probs["style"]),
+                np.random.choice(self.head_dims["confirm"], p=action_probs["confirm"])
+            ], dtype=int)
 
-        return action_idx, action_probs
+        return action_indices, action_probs
 
-    def update(self, state: np.ndarray, action_idx: int, advantage: float,
+    def update(self, state: np.ndarray, action_indices: np.ndarray, advantage: float,
                learning_rate: float = 0.01) -> float:
         """
         更新策略网络（REINFORCE算法）
 
         Args:
             state: 当前状态
-            action_idx: 执行的动作
+            action_indices: 执行的动作索引（多头）
             advantage: 优势函数 A(s,a) = Q(s,a) - V(s)
             learning_rate: 学习率
 
         Returns:
             损失值
         """
-        # 计算梯度
         action_probs = self.get_action_probs(state)
-        log_prob = np.log(action_probs[action_idx] + 1e-10)
 
-        # Policy gradient: -log π(a|s) * A
-        loss = -log_prob * advantage
+        total_loss = 0.0
+        head_order = ["agent", "automation", "style", "confirm"]
 
-        # 计算梯度
-        grad_log_prob = -np.eye(self.action_dim)[action_idx] / (action_probs + 1e-10)
+        for head_idx, head_name in enumerate(head_order):
+            probs = action_probs[head_name]
+            action_idx = int(action_indices[head_idx])
+            log_prob = np.log(probs[action_idx] + 1e-10)
 
-        # 更新权重
-        grad_w = np.outer(state, grad_log_prob[action_idx] * advantage)
-        self.weights -= learning_rate * grad_w
-        self.bias -= learning_rate * grad_log_prob[action_idx] * advantage
+            # Policy gradient: -log π(a|s) * A
+            loss = -log_prob * advantage
+            total_loss += loss
 
-        return loss
+            one_hot = np.zeros_like(probs)
+            one_hot[action_idx] = 1.0
+            grad_logits = (one_hot - probs) * advantage
+
+            # 梯度上升（等价于对损失下降）
+            self.weights[head_name] += learning_rate * np.outer(state, grad_logits)
+            self.bias[head_name] += learning_rate * grad_logits
+
+        return float(total_loss)
 
     def save(self, path: str) -> None:
         """保存模型参数"""
         params = {
-            "weights": self.weights.tolist(),
-            "bias": self.bias.tolist(),
+            "weights": {name: w.tolist() for name, w in self.weights.items()},
+            "bias": {name: b.tolist() for name, b in self.bias.items()},
             "state_dim": self.state_dim,
-            "action_dim": self.action_dim
+            "action_dim": self.action_dim,
+            "head_dims": self.head_dims
         }
 
         path = Path(path).expanduser()
@@ -154,10 +189,11 @@ class PolicyNetwork:
         with open(path, 'r') as f:
             params = json.load(f)
 
-        self.weights = np.array(params["weights"])
-        self.bias = np.array(params["bias"])
+        self.weights = {name: np.array(w) for name, w in params["weights"].items()}
+        self.bias = {name: np.array(b) for name, b in params["bias"].items()}
         self.state_dim = params["state_dim"]
         self.action_dim = params["action_dim"]
+        self.head_dims = params.get("head_dims", self.head_dims)
 
 
 class ValueNetwork:
@@ -306,28 +342,30 @@ class AlignmentAgent:
         state_vector = state.to_vector()
 
         # 采样动作索引
-        action_idx, action_probs = self.policy_net.sample_action(state_vector, explore)
+        action_indices, action_probs = self.policy_net.sample_action(state_vector, explore)
 
         # 将动作索引转换为Action对象
-        action = self._decode_action(action_idx)
+        action = self.decode_action_indices(action_indices)
 
         return action
 
-    def _decode_action(self, action_idx: int) -> Action:
+    def encode_action_indices(self, action: Action) -> np.ndarray:
+        """将Action编码为索引向量"""
+        agent_idx = [AgentType.CLAUDE, AgentType.CODEX, AgentType.GEMINI].index(action.agent_selection)
+        automation_idx = [AutomationLevel.LOW, AutomationLevel.MEDIUM, AutomationLevel.HIGH].index(action.automation_level)
+        style_idx = [CommunicationStyle.BRIEF, CommunicationStyle.DETAILED, CommunicationStyle.INTERACTIVE].index(action.communication_style)
+        confirm_idx = 1 if action.confirmation_needed else 0
+
+        return np.array([agent_idx, automation_idx, style_idx, confirm_idx], dtype=int)
+
+    def decode_action_indices(self, action_indices: np.ndarray) -> Action:
         """将动作索引解码为Action对象"""
-        # 简化的解码：将索引映射到动作
-        # 实际应用中需要更复杂的映射
+        agent_idx, automation_idx, style_idx, confirm_idx = [int(x) for x in action_indices]
 
-        # 分解action_idx为各个维度
-        agent_idx = action_idx // 9  # 3*3
-        automation_idx = (action_idx % 9) // 3  # 3
-        style_idx = action_idx % 3  # 3
-        confirm = (action_idx % 2) == 0  # 偶数需要确认
-
-        # 映射到枚举
-        agent_type = [AgentType.CLAUDE, AgentType.CODEX, AgentType.GEMINI][agent_idx % 3]
-        automation = [AutomationLevel.LOW, AutomationLevel.MEDIUM, AutomationLevel.HIGH][automation_idx % 3]
+        agent_type = [AgentType.CLAUDE, AgentType.CODEX, AgentType.GEMINI][agent_idx]
+        automation = [AutomationLevel.LOW, AutomationLevel.MEDIUM, AutomationLevel.HIGH][automation_idx]
         style = [CommunicationStyle.BRIEF, CommunicationStyle.DETAILED, CommunicationStyle.INTERACTIVE][style_idx]
+        confirm = bool(confirm_idx)
 
         return Action(
             agent_selection=agent_type,
@@ -358,7 +396,7 @@ class AlignmentAgent:
         # 逐步更新
         for i in range(len(trajectory)):
             state = trajectory.states[i]
-            action_idx = np.argmax(trajectory.actions[i])  # 从one-hot获取索引
+            action_indices = trajectory.actions[i]
             reward = trajectory.rewards[i]
             next_state = trajectory.next_states[i]
             done = trajectory.dones[i]
@@ -374,7 +412,7 @@ class AlignmentAgent:
             advantage = target_value - current_value
 
             # 更新Actor
-            actor_loss = self.policy_net.update(state, action_idx, advantage, self.actor_lr)
+            actor_loss = self.policy_net.update(state, action_indices, advantage, self.actor_lr)
             total_actor_loss += actor_loss
 
             # 更新Critic
@@ -509,9 +547,7 @@ def main():
 
             # 记录轨迹
             trajectory.states.append(state.to_vector())
-            trajectory.actions.append(action.to_vector(
-                env.AGENT_MAP, env.AUTOMATION_MAP, env.STYLE_MAP
-            ))
+            trajectory.actions.append(agent.encode_action_indices(action))
             trajectory.rewards.append(reward)
             trajectory.dones.append(done)
             trajectory.next_states.append(next_state.to_vector())

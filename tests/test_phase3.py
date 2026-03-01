@@ -178,6 +178,7 @@ class TestMonitoring:
 
             assert monitor is not None
             assert monitor.experiment_dir.exists()
+            monitor.close()
 
     def test_log_scalar(self):
         """测试记录标量"""
@@ -191,6 +192,7 @@ class TestMonitoring:
 
             assert "test/metric" in monitor.metrics_history
             assert len(monitor.metrics_history["test/metric"]) == 2
+            monitor.close()
 
     def test_log_training_step(self):
         """测试记录训练步骤"""
@@ -208,6 +210,7 @@ class TestMonitoring:
 
             assert "train/reward" in monitor.metrics_history
             assert monitor.metrics_history["train/reward"][0][1] == 0.75
+            monitor.close()
 
     def test_metrics_summary(self):
         """测试指标汇总"""
@@ -225,6 +228,7 @@ class TestMonitoring:
             assert "test/value" in summary
             assert summary["test/value"]["count"] == 10
             assert summary["test/value"]["mean"] > 0
+            monitor.close()
 
     def test_save_metrics(self):
         """测试保存指标"""
@@ -245,6 +249,7 @@ class TestMonitoring:
                 data = json.load(f)
 
             assert "test/metric" in data
+            monitor.close()
 
 
 class TestPerformanceOptimizer:
@@ -337,7 +342,8 @@ class TestPerformanceOptimizer:
         # 添加2个请求（小于batch_size）
         for _ in range(2):
             state = np.random.randn(10)
-            batch_infer.predict(state, sync=False)
+            request_id = batch_infer.predict(state, sync=False)
+            assert isinstance(request_id, int)
 
         # 队列应该有2个请求
         assert batch_infer.get_queue_size() == 2
@@ -345,6 +351,7 @@ class TestPerformanceOptimizer:
         # 刷新批量
         results = batch_infer.flush()
         assert len(results) == 2
+        assert all(isinstance(item, tuple) and len(item) == 2 for item in results)
 
         # 队列应该为空
         assert batch_infer.get_queue_size() == 0
@@ -402,6 +409,7 @@ class TestIntegration:
             summary = monitor.get_metrics_summary()
             assert "train/reward" in summary
             assert summary["train/reward"]["count"] == 10
+            monitor.close()
 
 
 if __name__ == "__main__":

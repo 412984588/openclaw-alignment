@@ -236,11 +236,7 @@ class RLLearner:
         # 4. 构建单步轨迹
         trajectory = Trajectory(
             states=[state.to_vector()],
-            actions=[action.to_vector(
-                self.env.AGENT_MAP,
-                self.env.AUTOMATION_MAP,
-                self.env.STYLE_MAP
-            )],
+            actions=[self.agent.encode_action_indices(action)],
             rewards=[reward],
             dones=[done],
             next_states=[next_state.to_vector()]

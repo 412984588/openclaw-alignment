@@ -50,6 +50,7 @@ class ExperienceReplay:
 
         # 存储经验的缓冲区
         self.buffer: List[Experience] = []
+        self.position = 0
 
         # 优先级采样相关
         self.priorities = np.zeros(capacity)
@@ -67,18 +68,16 @@ class ExperienceReplay:
         """
         if len(self.buffer) < self.capacity:
             self.buffer.append(experience)
-            if self.use_prioritized:
-                self.priorities[len(self.buffer) - 1] = self.max_priority
+            idx = len(self.buffer) - 1
         else:
             # 覆盖最旧的经验（循环缓冲）
-            idx = len(self.buffer) % self.capacity
-            if idx >= len(self.buffer):
-                self.buffer.append(experience)
-            else:
-                self.buffer[idx] = experience
+            idx = self.position
+            self.buffer[idx] = experience
 
-            if self.use_prioritized:
-                self.priorities[idx] = self.max_priority
+        if self.use_prioritized:
+            self.priorities[idx] = self.max_priority
+
+        self.position = (self.position + 1) % self.capacity
 
         # 更新最大优先级
         if self.use_prioritized:
@@ -114,7 +113,11 @@ class ExperienceReplay:
         # 计算采样概率
         priorities = self.priorities[:len(self.buffer)]
         probs = priorities ** self.alpha
-        probs /= probs.sum()
+        total = probs.sum()
+        if total == 0:
+            probs = np.ones_like(probs) / len(probs)
+        else:
+            probs /= total
 
         # 采样索引
         indices = np.random.choice(len(self.buffer), size=min(batch_size, len(self.buffer)), p=probs)
@@ -140,7 +143,7 @@ class ExperienceReplay:
         if not experiences:
             return (
                 np.zeros((0, 17)),  # states
-                np.zeros((0, 10)),  # actions
+                np.zeros((0, 4), dtype=int),  # actions (indices)
                 np.zeros(0),      # rewards
                 np.zeros((0, 17)), # next_states
                 np.zeros(0)       # dones
@@ -187,6 +190,7 @@ class ExperienceReplay:
         self.buffer.clear()
         self.priorities = np.zeros(self.capacity)
         self.max_priority = 1.0
+        self.position = 0
 
 
 def main():
@@ -199,7 +203,7 @@ def main():
     # 添加一些模拟经验
     for i in range(10):
         state = np.random.randn(17)
-        action = np.random.randn(10)
+        action = np.random.randint(0, 3, size=4)
         reward = np.random.randn()
         next_state = np.random.randn(17)
         done = i % 5 == 0

@@ -80,15 +80,16 @@ class TestAction:
         vector = action.to_vector(
             InteractionEnvironment.AGENT_MAP,
             InteractionEnvironment.AUTOMATION_MAP,
-            InteractionEnvironment.STYLE_MAP
+            InteractionEnvironment.STYLE_MAP,
+            InteractionEnvironment.CONFIRM_MAP
         )
 
-        # 3 + 3 + 3 + 1 = 10
-        assert vector.shape == (10,)
+        # 3 + 3 + 3 + 2 = 11
+        assert vector.shape == (11,)
         assert vector[2] == 1.0  # gemini
         assert vector[4] == 1.0  # medium
         assert vector[8] == 1.0  # interactive
-        assert vector[9] == 1.0  # confirmation
+        assert vector[10] == 1.0  # confirmation (True)
 
 
 class TestInteractionEnvironment:
@@ -99,7 +100,7 @@ class TestInteractionEnvironment:
         env = InteractionEnvironment()
 
         assert env.get_state_space_size() == 17
-        assert env.get_action_space_size() == 10
+        assert env.get_action_space_size() == 11
         assert env.episode_count == 0
         assert env.recent_performance == 0.5
 

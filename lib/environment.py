@@ -105,13 +105,14 @@ class Action:
 
     def to_vector(self, agent_map: Dict[AgentType, int],
                   automation_map: Dict[AutomationLevel, int],
-                  style_map: Dict[CommunicationStyle, int]) -> np.ndarray:
+                  style_map: Dict[CommunicationStyle, int],
+                  confirm_map: Dict[bool, int]) -> np.ndarray:
         """将动作转换为one-hot编码向量"""
         vector_size = (
             len(agent_map) +
             len(automation_map) +
             len(style_map) +
-            1  # confirmation_needed
+            len(confirm_map)  # confirmation_needed
         )
 
         vector = np.zeros(vector_size)
@@ -129,7 +130,7 @@ class Action:
 
         # 确认标志
         offset += len(style_map)
-        vector[offset] = 1.0 if self.confirmation_needed else 0.0
+        vector[offset + confirm_map[self.confirmation_needed]] = 1.0
 
         return vector
 
@@ -166,9 +167,9 @@ class InteractionEnvironment:
         "agent_selection": 3,  # claude, codex, gemini
         "automation_level": 3,  # low, medium, high
         "communication_style": 3,  # brief, detailed, interactive
-        "confirmation_needed": 1  # bool
+        "confirmation_needed": 2  # bool (False/True)
     }
-    TOTAL_ACTION_DIM = sum(ACTION_DIM.values())  # 10维
+    TOTAL_ACTION_DIM = sum(ACTION_DIM.values())  # 11维
 
     # 支持的技术栈
     SUPPORTED_TECH = {
@@ -195,6 +196,12 @@ class InteractionEnvironment:
         CommunicationStyle.BRIEF: 0,
         CommunicationStyle.DETAILED: 1,
         CommunicationStyle.INTERACTIVE: 2
+    }
+
+    # 确认标志映射
+    CONFIRM_MAP = {
+        False: 0,
+        True: 1
     }
 
     def __init__(self, config_path: Optional[str] = None):

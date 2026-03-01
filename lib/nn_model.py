@@ -46,7 +46,7 @@ class MLPModel(nn.Module):
 
 
 class PolicyNetworkPyTorch:
-    """PyTorch策略网络"""
+    """PyTorch策略网络（多头）"""
 
     def __init__(self, state_dim: int, action_dim: int, hidden_dims: List[int] = None):
         """
@@ -54,7 +54,7 @@ class PolicyNetworkPyTorch:
 
         Args:
             state_dim: 状态维度
-            action_dim: 动作维度
+            action_dim: 动作维度（应为11）
             hidden_dims: 隐藏层维度列表
         """
         if not TORCH_AVAILABLE:
@@ -64,54 +64,99 @@ class PolicyNetworkPyTorch:
         self.action_dim = action_dim
         self.hidden_dims = hidden_dims or [128, 128]
 
-        # 创建MLP模型
-        self.model = MLPModel(state_dim, self.hidden_dims, action_dim)
+        self.head_dims = {
+            "agent": 3,
+            "automation": 3,
+            "style": 3,
+            "confirm": 2
+        }
+
+        # 共享骨干网络
+        layers = []
+        prev_dim = state_dim
+        for hidden_dim in self.hidden_dims:
+            layers.append(nn.Linear(prev_dim, hidden_dim))
+            layers.append(nn.ReLU())
+            prev_dim = hidden_dim
+        self.backbone = nn.Sequential(*layers)
+
+        # 多头输出层
+        self.heads = nn.ModuleDict({
+            name: nn.Linear(prev_dim, dim)
+            for name, dim in self.head_dims.items()
+        })
 
         # 优化器
-        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=0.001)
+        self.optimizer = torch.optim.Adam(
+            list(self.backbone.parameters()) + list(self.heads.parameters()),
+            lr=0.001
+        )
 
-    def get_action_probs(self, state: np.ndarray) -> np.ndarray:
-        """获取动作概率分布"""
+    def _forward_logits(self, state_tensor: torch.Tensor) -> Dict[str, torch.Tensor]:
+        """前向传播，获取各头logits"""
+        features = self.backbone(state_tensor)
+        return {name: head(features) for name, head in self.heads.items()}
+
+    def get_action_probs(self, state: np.ndarray) -> Dict[str, np.ndarray]:
+        """获取动作概率分布（多头）"""
         with torch.no_grad():
             state_tensor = torch.FloatTensor(state)
-            logits = self.model(state_tensor)
-            probs = F.softmax(logits, dim=-1)
-            return probs.numpy()
+            logits = self._forward_logits(state_tensor)
+            probs = {name: F.softmax(head_logits, dim=-1).numpy() for name, head_logits in logits.items()}
+            return probs
 
-    def sample_action(self, state: np.ndarray, explore: bool = True) -> Tuple[int, np.ndarray]:
+    def sample_action(self, state: np.ndarray, explore: bool = True) -> Tuple[np.ndarray, Dict[str, np.ndarray]]:
         """采样动作"""
         action_probs = self.get_action_probs(state)
 
         if explore and np.random.random() < 0.1:
-            action_idx = np.random.randint(self.action_dim)
+            action_indices = np.array([
+                np.random.randint(self.head_dims["agent"]),
+                np.random.randint(self.head_dims["automation"]),
+                np.random.randint(self.head_dims["style"]),
+                np.random.randint(self.head_dims["confirm"])
+            ], dtype=int)
         else:
-            action_idx = np.random.choice(self.action_dim, p=action_probs)
+            action_indices = np.array([
+                np.random.choice(self.head_dims["agent"], p=action_probs["agent"]),
+                np.random.choice(self.head_dims["automation"], p=action_probs["automation"]),
+                np.random.choice(self.head_dims["style"], p=action_probs["style"]),
+                np.random.choice(self.head_dims["confirm"], p=action_probs["confirm"])
+            ], dtype=int)
 
-        return action_idx, action_probs
+        return action_indices, action_probs
 
-    def update(self, state: np.ndarray, action_idx: int, advantage: float) -> float:
+    def update(self, state: np.ndarray, action_indices: np.ndarray, advantage: float) -> float:
         """更新策略网络"""
         state_tensor = torch.FloatTensor(state).unsqueeze(0)
-        logits = self.model(state_tensor)
+        logits = self._forward_logits(state_tensor)
 
-        # 计算损失
-        log_prob = F.log_softmax(logits, dim=-1)
-        loss = -log_prob[0, action_idx] * advantage
+        # 计算损失（多头累加）
+        loss = 0.0
+        head_order = ["agent", "automation", "style", "confirm"]
+        for head_idx, head_name in enumerate(head_order):
+            log_prob = F.log_softmax(logits[head_name], dim=-1)
+            loss = loss - log_prob[0, int(action_indices[head_idx])] * advantage
 
         # 反向传播
         self.optimizer.zero_grad()
         loss.backward()
         self.optimizer.step()
 
-        return loss.item()
+        return float(loss.item())
 
     def save(self, path: str) -> None:
         """保存模型"""
-        torch.save(self.model.state_dict(), path)
+        torch.save({
+            "backbone": self.backbone.state_dict(),
+            "heads": self.heads.state_dict()
+        }, path)
 
     def load(self, path: str) -> None:
         """加载模型"""
-        self.model.load_state_dict(torch.load(path))
+        state = torch.load(path)
+        self.backbone.load_state_dict(state["backbone"])
+        self.heads.load_state_dict(state["heads"])
 
 
 class ValueNetworkPyTorch:
@@ -208,7 +253,7 @@ def create_value_network(state_dim: int, use_pytorch: bool = True):
 def main():
     """测试神经网络模型"""
     state_dim = 17
-    action_dim = 10
+    action_dim = 11
 
     print(f"PyTorch可用: {TORCH_AVAILABLE}")
 
