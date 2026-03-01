@@ -4,6 +4,28 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog and this project follows Semantic Versioning.
 
+## [1.0.1] - 2026-03-01
+
+### Fixed
+
+- **Legacy bilingual GEP compatibility**: Restore backward compatibility for legacy GEP data containing Chinese aliases
+  - Fixed `gep_to_md.py` to match bilingual (English + Chinese) alias keys
+  - Fixed `md_to_gep.py` to extract bilingual section mappings during migration
+  - Preserved SOUL capsule semantics during Markdown-to-GEP conversion
+
+### Added
+
+- **Compatibility regression tests**: Added `tests/test_gep_compatibility.py`
+  - Covers legacy Chinese data export/import roundtrip
+  - Validates bilingual alias handling
+
+### Changed
+
+- **Release hardening**: Strengthened quality gates
+  - Added `ConfirmationAPI` bootstrap validation
+  - Ensured all 132 tests pass before release
+  - Hardened documentation consistency checks
+
 ## [1.0.0] - 2026-03-01
 
 ### Added

@@ -82,7 +82,7 @@ class IntentAlignmentEngine:
             with open(self.config_path, 'r') as f:
                 config = json.load(f)
         else:
-            config = {"version": "1.0.0"}
+            config = {"version": "1.0.1"}
 
         config["learned_preferences"] = current
 

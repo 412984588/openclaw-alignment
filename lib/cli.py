@@ -133,7 +133,7 @@ class OpenClawAlignmentCLI:
         config_file = memory_dir / self.config_file_name
         if not config_file.exists() or force:
             config = {
-                "version": "1.0.0",
+                "version": "1.0.1",
                 "initialized_at": str(Path.cwd()),
                 "memory_path": str(memory_dir),
                 "features": {

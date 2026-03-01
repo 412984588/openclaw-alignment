@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "openclaw-alignment"
-version = "1.0.0"
+version = "1.0.1"
 description = "Reinforcement-learning driven alignment engine for OpenClaw workflows"
 readme = "README.md"
 license = "MIT"
