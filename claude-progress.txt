@@ -1,91 +1,26 @@
-## [2026-03-01 15:30] - Session 1
+OpenClaw Alignment Progress Log
 
-### 完成
-- ✅ OpenClaw Alignment GEP 协议支持改造（完整实施）
+Date: 2026-03-01
+Status: In active stabilization and quality hardening.
 
-### 实施阶段
+Completed
+- Added intelligent confirmation module and API wrapper.
+- Added GEP storage models and markdown converters.
+- Added integration and regression tests for new components.
+- Added CI type-check gate with mypy.
 
-#### Phase 1: GEP 资产层实现 ✅
-- 创建 `lib/gep.py` - Gene/Capsule/Event 数据模型，支持 SHA256 asset_id 计算
-- 创建 `lib/gep_store.py` - GEP 存储管理器，支持 JSON/JSONL 格式
-- 创建 `lib/md_to_gep.py` - Markdown → GEP 转换器（含自动迁移逻辑）
-- 创建 `lib/gep_to_md.py` - GEP → Markdown 导出器（兼容模式）
+Current Focus
+- Eliminate type/lint regressions in new confirmation/GEP stack.
+- Restore strict English-first policy across code and tests.
+- Ensure API bootstrap works even when `memory_dir/gep` is missing.
 
-#### Phase 2: RL 输出层改造 ✅
-- 修改 `lib/cli.py` init 方法 - 创建 `.openclaw_memory/gep/` 目录
-- 修改 `lib/cli.py` init 方法 - 检测并自动迁移现有 MD 文件
-- 修改 `lib/cli.py` status 方法 - 显示 GEP 统计信息（genes/capsules/events 数量）
-- 修改 `lib/learner.py` - 添加 GEP Store 初始化
-- 修改 `lib/learner.py` - 添加 `_update_gep_genes` 方法（任务完成后自动创建/更新 Gene）
-- 修改 `lib/__init__.py` - 导出 GEP 相关类（Gene、Capsule、Event、GEPStore 等）
+Quality Targets
+- `pytest` full suite passes.
+- `mypy` passes for lib + tests + scripts.
+- `ruff` passes with no warnings.
+- No CJK characters in tracked source/test/public text files.
 
-#### Phase 3: 新增 CLI 命令 ✅
-- 新增 `gene list` - 列出所有 Gene
-- 新增 `gene show <id>` - 显示 Gene 详情（包括 confidence、success_streak、strategy 等）
-- 新增 `capsule list` - 列出所有 Capsule
-- 新增 `capsule show <id>` - 显示 Capsule 详情（包括 genes_used）
-- 新增 `events [--limit N]` - 显示最近进化记录（默认 20 条）
-- 新增 `export-md` - 从 GEP 导出 Markdown 格式（USER.md/SOUL.md/AGENTS.md）
-
-#### Phase 4: GEP → Markdown 导出器 ✅
-- `lib/gep_to_md.py` 已在 Phase 1 中实现
-- 支持从 Gene 导出 USER.md
-- 支持从 Capsule 导出 SOUL.md
-- 支持从 Gene 导出 AGENTS.md
-- 兼容模式：即使没有 GEP 资产也能导出默认模板
-
-#### Phase 5: 测试验证 ✅
-- 创建 `tests/test_gep.py` - 16 个单元测试全部通过
-- 创建 `tests/test_gep_integration.py` - 9 个集成测试全部通过
-- 总计 25 个测试，100% 通过率
-
-### 技术亮点
-
-1. **纯 Python 实现** - 无需 EvoMap API 依赖
-2. **向后兼容** - 保留 export-md 命令，支持从 GEP 导出 Markdown
-3. **自动迁移** - init 时检测现有 MD 文件并自动转换
-4. **RL 集成** - 任务完成后自动创建/更新 Gene，记录 Event
-5. **SHA256 追踪** - 所有资产都有唯一的 asset_id
-6. **中文文档** - 所有注释和文档使用中文
-
-### 文件清单
-
-**新建文件（6 个）**：
-- `lib/gep.py` (211 行)
-- `lib/gep_store.py` (245 行)
-- `lib/md_to_gep.py` (220 行)
-- `lib/gep_to_md.py` (265 行)
-- `tests/test_gep.py` (270 行)
-- `tests/test_gep_integration.py` (260 行)
-
-**修改文件（3 个）**：
-- `lib/cli.py` (+200 行)
-- `lib/learner.py` (+50 行)
-- `lib/__init__.py` (+10 行)
-
-**总计**：约 1,731 行代码/测试/文档
-
-### 验收标准
-
-所有 14 项验收标准全部达成 ✅
-
-### 下一步建议
-
-1. 实际使用测试：运行 `openclaw-align init` 并验证 GEP 文件生成
-2. 性能测试：大量 Gene/Capsule/Event 下的性能表现
-3. 文档更新：更新 README.md 添加 GEP 相关使用说明
-4. 示例脚本：创建示例展示如何使用 GEP API
-
-### 遇到的问题
-
-1. **IndentationError**：`lib/gep_to_md.py` 中缩进错误
-   - 原因：编辑时删除了 `if-else` 结构但忘记修复缩进
-   - 解决：重新检查并修正所有缩进
-
-2. **AttributeError**：Capsule 没有 strategy 属性
-   - 原因：测试中错误假设 Capsule 有 strategy 属性
-   - 解决：修正测试代码，使用正确的 Capsule 结构
-
-3. **测试失败**：自动迁移测试失败（目录已存在）
-   - 原因：fixture 残留导致目录冲突
-   - 解决：添加 rmtree 清理逻辑，使用 force=True
+Next Milestones
+1. Finish refactor of confirmation types and confidence payloads.
+2. Land bootstrap tests for ConfirmationAPI first-run behavior.
+3. Run full release-readiness checks and publish final audit report.

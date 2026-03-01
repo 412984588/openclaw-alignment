@@ -46,3 +46,18 @@ def test_integration_help_is_english_only() -> None:
     )
     assert result.returncode == 0, result.stdout + result.stderr
     assert not _contains_cjk(result.stdout), "python -m lib.integration --help should be English-only"
+
+
+def test_new_confirmation_modules_are_english_only() -> None:
+    repo = _repo_root()
+    paths = [
+        repo / "lib" / "api.py",
+        repo / "lib" / "confirmation.py",
+        repo / "lib" / "gep.py",
+        repo / "lib" / "gep_store.py",
+        repo / "lib" / "gep_to_md.py",
+        repo / "lib" / "md_to_gep.py",
+    ]
+    for path in paths:
+        content = path.read_text(encoding="utf-8")
+        assert not _contains_cjk(content), f"{path.name} should be English-only"

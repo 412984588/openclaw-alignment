@@ -1,47 +1,63 @@
 #!/usr/bin/env python3
-"""
-GEP → Markdown 导出器
+"""Exporter from GEP assets back to Markdown configuration files."""
 
-将 GEP 格式（Gene/Capsule）导出为 Markdown 配置文件（USER.md/SOUL.md/AGENTS.md）。
-用于向后兼容和手动编辑。
-"""
+from __future__ import annotations
 
 from pathlib import Path
-from typing import Dict, List, Optional
 
-from .gep import Gene, Capsule
+from .gep import Capsule, Gene
 from .gep_store import GEPStore
+
+# Legacy compatibility aliases. Chinese terms are encoded with unicode escapes to
+# keep source files English-only while still matching old persisted data.
+_BASIC_INFO_ALIASES = (
+    "Basic information",
+    "basic info",
+    "\u57fa\u672c\u4fe1\u606f",
+)
+_WORK_PREF_ALIASES = (
+    "Working preferences",
+    "work habits",
+    "\u5de5\u4f5c\u4e60\u60ef\u504f\u597d",
+    "\u5de5\u4f5c\u4e60\u60ef",
+)
+_PROJECT_CONSTRAINT_ALIASES = (
+    "Project constraints",
+    "project specific constraints",
+    "\u9879\u76ee\u7279\u5b9a\u7ea6\u675f",
+)
+_TOOL_DISPATCH_ALIASES = (
+    "Agent tool dispatch",
+    "tool dispatch",
+    "\u5de5\u5177\u8c03\u5ea6\u7b56\u7565",
+)
+_OPERATION_RULE_ALIASES = (
+    "Agent operation rules",
+    "operation rules",
+    "\u64cd\u4f5c\u89c4\u5219",
+)
+_ESCALATION_ALIASES = (
+    "Escalation policy",
+    "escalation",
+    "\u4e0d\u786e\u5b9a\u65f6\u5347\u7ea7\u7b56\u7565",
+)
+_SAFETY_CAPSULE_ALIASES = (
+    "Safety boundary",
+    "Safety boundary and core principles",
+    "\u5b89\u5168\u8fb9\u754c",
+)
 
 
 class GEPToMarkdownExporter:
-    """
-    GEP → Markdown 导出器
+    """Export genes/capsules to USER.md, SOUL.md and AGENTS.md."""
 
-    负责将 GEP 资产导出为 Markdown 配置文件。
-    """
+    def export_genes_to_user_md(self, genes: dict[str, Gene], output_path: Path) -> None:
+        """Export USER.md from user-related genes."""
+        basic_info_gene = self._find_gene_by_aliases(genes, _BASIC_INFO_ALIASES)
+        work_habits_gene = self._find_gene_by_aliases(genes, _WORK_PREF_ALIASES)
+        constraints_gene = self._find_gene_by_aliases(genes, _PROJECT_CONSTRAINT_ALIASES)
 
-    def export_genes_to_user_md(self, genes: Dict[str, Gene], output_path: Path) -> None:
-        """
-        将 Gene 导出为 USER.md
-
-        映射关系：
-        - 基本信息 Gene → 基本信息
-        - 工作习惯 Gene → 工作偏好
-        - 沟通风格 Gene → 沟通风格
-
-        Args:
-            genes: Gene 字典
-            output_path: 输出文件路径
-        """
-        # 提取相关 Gene
-        basic_info_gene = self._find_gene_by_summary(genes, "基本信息")
-        work_habits_gene = self._find_gene_by_summary(genes, "工作习惯")
-        constraints_gene = self._find_gene_by_summary(genes, "项目特定约束")
-
-        # 构建 Markdown 内容
         content = "# USER\n\n"
-
-        # 基本信息
         content += "## Basic Information\n\n"
         if basic_info_gene:
             content += self._format_gene_strategy(basic_info_gene)
@@ -50,7 +66,6 @@ class GEPToMarkdownExporter:
             content += "- Role: [Developer | Data Scientist | DevOps | Manager]\n"
             content += "- Primary Stack: [Python | JavaScript | Go | Rust | Other]\n"
 
-        # 工作偏好
         content += "\n## Working Preferences\n\n"
         if work_habits_gene:
             content += self._format_gene_strategy(work_habits_gene)
@@ -59,91 +74,56 @@ class GEPToMarkdownExporter:
             content += "- Automation preference: [low | medium | high]\n"
             content += "- Review depth: [light | standard | strict]\n"
 
-        # 备注
         content += "\n## Notes\n\n"
         if constraints_gene:
             content += self._format_gene_strategy(constraints_gene)
         else:
             content += "- Add project-specific constraints and personal preferences here.\n"
 
-        # 写入文件
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(output_path, 'w', encoding='utf-8') as f:
-            f.write(content)
+        output_path.write_text(content, encoding="utf-8")
+        print(f"✅ Exported USER.md: {output_path}")
 
-        print(f"✅ 导出 USER.md: {output_path}")
+    def export_capsule_to_soul_md(self, capsule: Capsule | None, output_path: Path) -> None:
+        """Export SOUL.md from a capsule (currently template-based)."""
+        _ = capsule
 
-    def export_capsule_to_soul_md(self, capsule: Optional[Capsule], output_path: Path) -> None:
-        """
-        将 Capsule 导出为 SOUL.md
-
-        映射关系：安全边界 Capsule → SOUL.md
-
-        Args:
-            capsule: Capsule 对象（可选）
-            output_path: 输出文件路径
-        """
         content = "# SOUL\n\n"
-
-        # Capsule 没有 strategy 属性，始终使用默认模板
-        # 如果需要自定义内容，应该从 Gene 中获取
-        # TODO: 未来可以从 capsule.genes_used 关联的 Gene 中提取内容
-        # 现在先使用默认模板
         content += "## Core Principles\n\n"
         content += "1. Safety First\n\n"
         content += "- Protect user data\n"
         content += "- Require explicit confirmation for high-risk actions\n"
         content += "- Respect task boundaries\n\n"
-
         content += "2. Transparency and Control\n\n"
         content += "- Explain recommendations\n"
         content += "- Keep user as final decision-maker\n"
         content += "- Keep auditable logs\n\n"
-
         content += "3. Continuous Learning\n\n"
         content += "- Improve incrementally from feedback\n"
         content += "- Avoid overfitting to short-term patterns\n\n"
-
         content += "4. Quality Assurance\n\n"
         content += "- Prefer test-first workflows\n"
         content += "- Keep documentation in sync with behavior\n"
         content += "- Monitor performance and regressions\n\n"
-
         content += "## Prohibited Actions\n\n"
         content += "- Destructive file operations without confirmation\n"
         content += "- Unauthorized external network or data export\n"
         content += "- Secret disclosure\n\n"
-
         content += "## Reward Signals\n\n"
         content += "- Positive: task completion, quality improvement, user acceptance\n"
         content += "- Negative: regressions, boundary violations, repeated failures\n"
 
-        # 写入文件
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(output_path, 'w', encoding='utf-8') as f:
-            f.write(content)
+        output_path.write_text(content, encoding="utf-8")
+        print(f"✅ Exported SOUL.md: {output_path}")
 
-        print(f"✅ 导出 SOUL.md: {output_path}")
+    def export_agent_genes_to_agents_md(self, genes: dict[str, Gene], output_path: Path) -> None:
+        """Export AGENTS.md from agent-related genes."""
+        tool_dispatch_gene = self._find_gene_by_aliases(genes, _TOOL_DISPATCH_ALIASES)
+        operation_rules_gene = self._find_gene_by_aliases(genes, _OPERATION_RULE_ALIASES)
+        escalation_gene = self._find_gene_by_aliases(genes, _ESCALATION_ALIASES)
 
-    def export_agent_genes_to_agents_md(self, genes: Dict[str, Gene], output_path: Path) -> None:
-        """
-        将 Agent 相关 Gene 导出为 AGENTS.md
-
-        映射关系：Agent Gene → AGENTS.md
-
-        Args:
-            genes: Gene 字典
-            output_path: 输出文件路径
-        """
-        # 提取相关 Gene
-        tool_dispatch_gene = self._find_gene_by_summary(genes, "Agent 工具调度策略")
-        operation_rules_gene = self._find_gene_by_summary(genes, "Agent 操作规则")
-        escalation_gene = self._find_gene_by_summary(genes, "不确定时升级策略")
-
-        # 构建 Markdown 内容
         content = "# AGENTS\n\n"
-
-        # 工具调度
         content += "## Tool Dispatch\n\n"
         if tool_dispatch_gene:
             content += self._format_gene_strategy(tool_dispatch_gene)
@@ -152,7 +132,6 @@ class GEPToMarkdownExporter:
             content += "- Claude Code: UI and interaction-heavy tasks\n"
             content += "- Gemini: research and external references\n"
 
-        # 操作规则
         content += "\n## Operation Rules\n\n"
         if operation_rules_gene:
             content += self._format_gene_strategy(operation_rules_gene)
@@ -161,108 +140,63 @@ class GEPToMarkdownExporter:
             content += "- Keep changes atomic and reviewable\n"
             content += "- Run full validation before release\n"
 
-        # 升级策略
         content += "\n## Escalation\n\n"
         if escalation_gene:
             content += self._format_gene_strategy(escalation_gene)
         else:
             content += "- If uncertainty is high, request explicit confirmation before proceeding\n"
 
-        # 写入文件
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(output_path, 'w', encoding='utf-8') as f:
-            f.write(content)
-
-        print(f"✅ 导出 AGENTS.md: {output_path}")
+        output_path.write_text(content, encoding="utf-8")
+        print(f"✅ Exported AGENTS.md: {output_path}")
 
     def export_all(self, gep_dir: Path, output_dir: Path) -> None:
-        """
-        导出所有 GEP 资产为 Markdown 格式
-
-        用于 `openclaw-align export-md` 命令。
-
-        Args:
-            gep_dir: GEP 目录
-            output_dir: 输出目录（通常是 .openclaw_memory/）
-        """
+        """Export all supported Markdown files from one GEP directory."""
         gep_store = GEPStore(gep_dir)
-
-        # 加载所有资产
         genes = gep_store.load_genes()
         capsules = gep_store.load_capsules()
 
-        # 查找安全边界 Capsule
-        safety_capsule = self._find_capsule_by_summary(capsules, "安全边界")
+        safety_capsule = self._find_capsule_by_aliases(capsules, _SAFETY_CAPSULE_ALIASES)
 
-        # 导出 USER.md
-        user_md_path = output_dir / "USER.md"
-        self.export_genes_to_user_md(genes, user_md_path)
+        self.export_genes_to_user_md(genes, output_dir / "USER.md")
+        self.export_capsule_to_soul_md(safety_capsule, output_dir / "SOUL.md")
+        self.export_agent_genes_to_agents_md(genes, output_dir / "AGENTS.md")
 
-        # 导出 SOUL.md
-        soul_md_path = output_dir / "SOUL.md"
-        self.export_capsule_to_soul_md(safety_capsule, soul_md_path)
+        print("\n✨ Markdown export completed")
 
-        # 导出 AGENTS.md
-        agents_md_path = output_dir / "AGENTS.md"
-        self.export_agent_genes_to_agents_md(genes, agents_md_path)
-
-        print("\n✨ 所有 Markdown 文件导出完成！")
-
-    def _find_gene_by_summary(self, genes: Dict[str, Gene], keyword: str) -> Optional[Gene]:
-        """
-        根据摘要关键词查找 Gene
-
-        Args:
-            genes: Gene 字典
-            keyword: 关键词
-
-        Returns:
-            匹配的 Gene，如果找不到则返回 None
-        """
+    def _find_gene_by_aliases(self, genes: dict[str, Gene], aliases: tuple[str, ...]) -> Gene | None:
         for gene in genes.values():
-            if keyword in gene.summary:
-                return gene
+            summary = gene.summary.lower()
+            for alias in aliases:
+                if alias.lower() in summary:
+                    return gene
         return None
 
-    def _find_capsule_by_summary(self, capsules: Dict[str, Capsule], keyword: str) -> Optional[Capsule]:
-        """
-        根据摘要关键词查找 Capsule
-
-        Args:
-            capsules: Capsule 字典
-            keyword: 关键词
-
-        Returns:
-            匹配的 Capsule，如果找不到则返回 None
-        """
+    def _find_capsule_by_aliases(
+        self,
+        capsules: dict[str, Capsule],
+        aliases: tuple[str, ...],
+    ) -> Capsule | None:
         for capsule in capsules.values():
-            if keyword in capsule.summary:
-                return capsule
+            summary = capsule.summary.lower()
+            for alias in aliases:
+                if alias.lower() in summary:
+                    return capsule
         return None
 
-    def _format_gene_strategy(self, gene: Gene) -> str:
-        """
-        格式化 Gene 策略为 Markdown 列表
-
-        Args:
-            gene: Gene 对象
-
-        Returns:
-            格式化的 Markdown 字符串
-        """
+    @staticmethod
+    def _format_gene_strategy(gene: Gene) -> str:
         strategy = gene.strategy.strip()
+        if strategy.startswith("-") or "\n-" in strategy:
+            return strategy if strategy.endswith("\n") else strategy + "\n"
 
-        # 如果策略已经包含 Markdown 格式，直接返回
-        if strategy.startswith('-') or '\n-' in strategy:
-            return strategy
-
-        # 否则，将每一行转换为列表项
-        lines = strategy.split('\n')
-        formatted_lines = []
+        lines = strategy.split("\n")
+        normalized: list[str] = []
         for line in lines:
-            line = line.strip()
-            if line and not line.startswith('-'):
-                line = f"- {line}"
-            formatted_lines.append(line)
-
-        return '\n'.join(formatted_lines) + '\n'
+            item = line.strip()
+            if not item:
+                continue
+            if not item.startswith("-"):
+                item = f"- {item}"
+            normalized.append(item)
+        return "\n".join(normalized) + "\n"

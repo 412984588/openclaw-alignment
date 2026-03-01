@@ -1,143 +1,87 @@
 #!/usr/bin/env python3
-"""
-OpenClaw Alignment API
+"""Public API entry points for intelligent confirmation."""
 
-供外部系统（如 OpenClaw Gateway）调用的 API 接口。
-提供智能确认决策和反馈记录功能。
-"""
+from __future__ import annotations
 
-from typing import Dict, Any, Tuple, Optional
 from pathlib import Path
+from typing import Any
+
+from .confirmation import IntelligentConfirmation
+from .gep_store import GEPStore
 
 
 class ConfirmationAPI:
-    """
-    确认 API 类
+    """API wrapper for external integrations (for example gateway services)."""
 
-    供外部系统调用的 API，提供智能确认决策功能。
-    """
-
-    def __init__(self, memory_dir: Optional[Path] = None):
-        """
-        初始化 API
-
-        Args:
-            memory_dir: 内存目录路径（默认为当前目录的 .openclaw_memory）
-        """
+    def __init__(self, memory_dir: Path | None = None):
         if memory_dir is None:
             memory_dir = Path.cwd() / ".openclaw_memory"
 
         self.memory_dir = Path(memory_dir)
-        gep_dir = self.memory_dir / "gep"
-
-        # 初始化 GEP Store 和智能确认引擎
-        from .gep_store import GEPStore
-        from .confirmation import IntelligentConfirmation
-
-        self.gep_store = GEPStore(gep_dir) if gep_dir.exists() else None
+        self.gep_store = self._bootstrap_gep_store(self.memory_dir)
         self.conf_engine = IntelligentConfirmation(self.gep_store)
 
-    def should_auto_execute(self, task: Dict[str, Any]) -> Tuple[bool, str, Dict[str, Any]]:
-        """
-        判断是否应该自动执行
+    @staticmethod
+    def _bootstrap_gep_store(memory_dir: Path) -> GEPStore:
+        """Create and initialize GEP storage files when missing."""
+        gep_dir = memory_dir / "gep"
+        store = GEPStore(gep_dir)
 
-        Args:
-            task: 任务上下文，包含：
-                - task_type: 任务类型（T1/T2/T3/T4）
-                - task_description: 任务描述
-                - command: 执行的命令（如果有）
-                - files: 涉及的文件列表（如果有）
+        if not store.genes_file.exists():
+            store.save_genes({})
+        if not store.capsules_file.exists():
+            store.save_capsules({})
+        if not store.events_file.exists():
+            store.events_file.touch()
 
-        Returns:
-            (是否自动执行, 原因, 详细信息)
+        return store
 
-            详细信息包含：
-            - confidence: 最大信心度
-            - success_streak: 最小连续成功次数
-            - relevant_genes_count: 相关 Gene 数量
-        """
+    def should_auto_execute(self, task: dict[str, Any]) -> tuple[bool, str, dict[str, Any]]:
+        """Return `(auto_execute, reason, details)` for one task context."""
         should_confirm, reason = self.conf_engine.should_confirm(task)
         confidence_info = self.conf_engine.get_confidence_info(task)
 
-        details = {
-            "confidence": confidence_info.get("max_confidence", 0.0),
-            "success_streak": confidence_info.get("min_success_streak", 0),
-            "relevant_genes_count": confidence_info.get("count", 0)
+        details: dict[str, Any] = {
+            "confidence": confidence_info["max_confidence"],
+            "success_streak": confidence_info["min_success_streak"],
+            "relevant_genes_count": confidence_info["count"],
         }
+        return not should_confirm, reason, details
 
-        return (not should_confirm, reason, details)
-
-    def record_execution_result(self, task: Dict[str, Any], success: bool, auto_executed: bool) -> None:
-        """
-        记录执行结果
-
-        Args:
-            task: 任务上下文
-            success: 任务是否成功
-            auto_executed: 是否自动执行（无需用户确认）
-        """
+    def record_execution_result(self, task: dict[str, Any], success: bool, auto_executed: bool) -> None:
+        """Persist execution feedback into gene confidence history."""
         self.conf_engine.record_feedback(
             task,
             was_confirmed=not auto_executed,
-            user_cancelled=not success
+            user_cancelled=not success,
         )
 
-    def get_confidence_history(self, task_type: Optional[str] = None) -> Dict[str, Any]:
-        """
-        获取 confidence 历史
-
-        Args:
-            task_type: 任务类型过滤（可选）
-
-        Returns:
-            confidence 历史字典
-        """
-        if not self.gep_store:
-            return {"genes": []}
-
+    def get_confidence_history(self, task_type: str | None = None) -> dict[str, Any]:
+        """Return confidence history, optionally filtered by task type."""
         genes = self.gep_store.load_genes()
 
         if task_type:
-            relevant_genes = [g for g in genes.values() if task_type in g.trigger]
+            relevant_genes = [gene for gene in genes.values() if task_type in gene.trigger]
         else:
-            relevant_genes = [g for g in genes.values() if g.confidence > 0.5]
+            relevant_genes = [gene for gene in genes.values() if gene.confidence > 0.5]
 
         return {
             "genes": [
                 {
-                    "id": g.id,
-                    "summary": g.summary,
-                    "confidence": g.confidence,
-                    "success_streak": g.success_streak
+                    "id": gene.id,
+                    "summary": gene.summary,
+                    "confidence": gene.confidence,
+                    "success_streak": gene.success_streak,
                 }
-                for g in sorted(relevant_genes, key=lambda x: -x.confidence)
+                for gene in sorted(relevant_genes, key=lambda item: -item.confidence)
             ]
         }
 
-    def get_explanation(self, task: Dict[str, Any], should_confirm: bool, reason: str) -> str:
-        """
-        生成决策说明
-
-        Args:
-            task: 任务上下文
-            should_confirm: 是否需要确认
-            reason: 原因说明
-
-        Returns:
-            格式化的说明文本
-        """
+    def get_explanation(self, task: dict[str, Any], should_confirm: bool, reason: str) -> str:
+        """Return a readable explanation for one confirmation decision."""
         return self.conf_engine.get_explanation(task, should_confirm, reason)
 
 
-# 便捷函数：快速创建 API 实例
-def create_api(memory_dir: Optional[Path] = None) -> ConfirmationAPI:
-    """
-    创建 ConfirmationAPI 实例
-
-    Args:
-        memory_dir: 内存目录路径（默认为当前目录的 .openclaw_memory）
-
-    Returns:
-        ConfirmationAPI 实例
-    """
+def create_api(memory_dir: Path | None = None) -> ConfirmationAPI:
+    """Convenience factory for `ConfirmationAPI`."""
     return ConfirmationAPI(memory_dir)

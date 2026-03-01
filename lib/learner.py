@@ -202,14 +202,14 @@ class RLLearner:
         # current trajectory
         self.current_trajectory: Optional[Trajectory] = None
 
-        # Historical preference statistics（task_type + Select dimensions）
+        # Historical preference statistics (task_type + selection dimensions)
         self._agent_reward_history: Dict[Tuple[str, str], List[float]] = defaultdict(list)
         self._workflow_reward_history: Dict[Tuple[str, str], List[float]] = defaultdict(list)
 
         # contract：Reward system prioritizes reading learner history
         self.env.reward_calculator.set_history_provider(self)
 
-        # Initialize GEP Store（如果可用）
+        # Initialize GEP store if available
         from .gep_store import GEPStore
         memory_dir = Path(self.config_path).parent
         gep_dir = memory_dir / "gep"
@@ -270,7 +270,7 @@ class RLLearner:
         if self.agent.episode_count % 10 == 0:
             self.save_model()
 
-        # 7. 自动创建/更新 GEP Gene（如果可用）
+        # 7. Auto-create or update GEP genes (if available)
         if self.gep_store:
             self._update_gep_genes(task_context, task_result, reward, action)
 
@@ -285,7 +285,7 @@ class RLLearner:
         """
         Get recommended actions（Do not update policy）
 
-        集成智能确认决策：基于 GEP confidence 和任务风险，动态决定是否需要确认。
+        Integrate intelligent confirmation decisions based on GEP confidence and risk.
 
         Args:
             task_context: task context
@@ -299,7 +299,7 @@ class RLLearner:
         # Select action（Not exploring）
         action = self.agent.select_action(state, explore=False)
 
-        # 智能确认决策
+        # Intelligent confirmation decision
         from .confirmation import IntelligentConfirmation
         confirmation_engine = IntelligentConfirmation(self.gep_store)
 
@@ -309,8 +309,8 @@ class RLLearner:
             "agent": action.agent_selection.value,
             "automation_level": action.automation_level.value,
             "communication_style": action.communication_style.value,
-            "confirmation_needed": should_confirm,  # 基于智能决策
-            "confirmation_reason": reason,  # 决策原因
+            "confirmation_needed": should_confirm,  # Derived by intelligent decision policy
+            "confirmation_reason": reason,  # Human-readable decision reason
             "confidence": 0.7 + self.env.recent_performance * 0.3  # Performance-based confidence
         }
 
@@ -353,15 +353,15 @@ class RLLearner:
                          task_result: Dict[str, Any],
                          reward: float, action) -> None:
         """
-        自动创建/更新 GEP Gene（内部方法）
+        Auto-create or update GEP genes (internal helper).
 
-        在每次任务完成后自动调用，根据任务结果更新相关 Gene。
+        Called after each task to update relevant genes using task outcome.
 
         Args:
-            task_context: 任务上下文
-            task_result: 任务结果
+            task_context: Task context
+            task_result: Task result
             reward: RL reward
-            action: 执行的动作
+            action: Chosen action
         """
         if not self.gep_store:
             return
@@ -369,21 +369,22 @@ class RLLearner:
         from .gep import Gene, Event
         from datetime import datetime
 
-        # 1. 创建或更新 Agent 选择偏好 Gene
+        # 1. Create or update the agent selection preference gene
         agent_gene_id = f"gene_agent_selection_{action.agent_selection.value}"
         genes = self.gep_store.load_genes()
+        gene_exists = agent_gene_id in genes
 
-        if agent_gene_id in genes:
-            # 更新现有 Gene
+        if gene_exists:
+            # Update existing gene
             gene = genes[agent_gene_id]
             gene.increment_confidence(reward)
         else:
-            # 创建新 Gene
+            # Create a new gene
             gene = Gene(
                 id=agent_gene_id,
-                summary=f"Agent 选择偏好: {action.agent_selection.value}",
+                summary=f"Agent selection preference: {action.agent_selection.value}",
                 category="optimize",
-                strategy=f"使用 {action.agent_selection.value} 处理任务",
+                strategy=f"Use {action.agent_selection.value} to process matching tasks",
                 trigger=["task_start", "agent_selection"],
                 confidence=min(1.0, max(0.0, reward)),
                 success_streak=1 if reward > 0.7 else 0
@@ -393,14 +394,14 @@ class RLLearner:
         genes[agent_gene_id] = gene
         self.gep_store.save_genes(genes)
 
-        # 2. 记录 Event
+        # 2. Record event
         event = Event(
             timestamp=datetime.now().isoformat(),
-            event_type="gene_updated" if agent_gene_id in genes else "gene_created",
+            event_type="gene_updated" if gene_exists else "gene_created",
             asset_id=gene.asset_id,
             trigger_signals=[task_context.get("task_type", "unknown")],
             rl_reward=float(reward),
-            changes=f"任务完成，reward={reward:.2f}",
+            changes=f"Task completed, reward={reward:.2f}",
             source_node_id="rl_learner"
         )
         self.gep_store.append_event(event)

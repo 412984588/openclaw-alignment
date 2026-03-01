@@ -86,7 +86,7 @@ class OpenClawAlignmentCLI:
             agents_md = memory_dir / "AGENTS.md"
 
             if user_md.exists() or soul_md.exists() or agents_md.exists():
-                print("🔄 检测到现有 Markdown 文件，自动迁移到 GEP 格式...")
+                print("🔄 Existing markdown files detected. Migrating to GEP format...")
                 from .md_to_gep import MarkdownToGEPConverter
                 from .gep_store import GEPStore
 
@@ -217,12 +217,12 @@ class OpenClawAlignmentCLI:
                 from .gep_store import GEPStore
                 gep_store = GEPStore(gep_dir)
                 stats = gep_store.get_stats()
-                print(f"   ✅ gep/ directory")
+                print("   ✅ gep/ directory")
                 print(f"      Genes: {stats['total_genes']}")
                 print(f"      Capsules: {stats['total_capsules']}")
                 print(f"      Events: {stats['total_events']}")
             else:
-                print(f"   ❌ gep/ directory (missing)")
+                print("   ❌ gep/ directory (missing)")
         else:
             print("💡 Tip: run 'openclaw-align init' to initialize memory files")
         print("")
@@ -236,7 +236,7 @@ class OpenClawAlignmentCLI:
         print(f"Install path: {Path(__file__).parent.parent}")
 
     def gene_list(self) -> None:
-        """列出所有 Gene"""
+        """List all genes."""
         cwd = Path.cwd()
         memory_dir = self.get_memory_dir(cwd)
         gep_dir = memory_dir / "gep"
@@ -259,7 +259,7 @@ class OpenClawAlignmentCLI:
             print(f"   {gene}")
 
     def gene_show(self, gene_id: str) -> None:
-        """显示 Gene 详情"""
+        """Show gene details."""
         cwd = Path.cwd()
         memory_dir = self.get_memory_dir(cwd)
         gep_dir = memory_dir / "gep"
@@ -284,29 +284,29 @@ class OpenClawAlignmentCLI:
         print(f"Success Streak: {gene.success_streak}")
         print(f"Asset ID: {gene.asset_id}")
         print("")
-        print(f"Strategy:")
+        print("Strategy:")
         print(gene.strategy)
         if gene.trigger:
             print("")
             print(f"Triggers: {', '.join(gene.trigger)}")
         if gene.preconditions:
             print("")
-            print(f"Preconditions:")
+            print("Preconditions:")
             for cond in gene.preconditions:
                 print(f"  - {cond}")
         if gene.postconditions:
             print("")
-            print(f"Postconditions:")
+            print("Postconditions:")
             for cond in gene.postconditions:
                 print(f"  - {cond}")
         if gene.validation:
             print("")
-            print(f"Validation:")
+            print("Validation:")
             for test in gene.validation:
                 print(f"  - {test}")
 
     def capsule_list(self) -> None:
-        """列出所有 Capsule"""
+        """List all capsules."""
         cwd = Path.cwd()
         memory_dir = self.get_memory_dir(cwd)
         gep_dir = memory_dir / "gep"
@@ -329,7 +329,7 @@ class OpenClawAlignmentCLI:
             print(f"   {capsule}")
 
     def capsule_show(self, capsule_id: str) -> None:
-        """显示 Capsule 详情"""
+        """Show capsule details."""
         cwd = Path.cwd()
         memory_dir = self.get_memory_dir(cwd)
         gep_dir = memory_dir / "gep"
@@ -364,7 +364,7 @@ class OpenClawAlignmentCLI:
             print(f"Triggers: {', '.join(capsule.trigger)}")
 
     def events_show(self, limit: int = 20) -> None:
-        """显示最近进化记录"""
+        """Show recent evolution events."""
         cwd = Path.cwd()
         memory_dir = self.get_memory_dir(cwd)
         gep_dir = memory_dir / "gep"
@@ -387,7 +387,7 @@ class OpenClawAlignmentCLI:
             print(f"   {event}")
 
     def export_md(self) -> None:
-        """从 Gene/Capsule 导出 Markdown 格式（兼容模式）"""
+        """Export markdown files from Gene/Capsule assets."""
         cwd = Path.cwd()
         memory_dir = self.get_memory_dir(cwd)
         gep_dir = memory_dir / "gep"
@@ -404,7 +404,7 @@ class OpenClawAlignmentCLI:
         print("✨ Markdown files exported successfully!")
 
     def confidence_history(self, task_type: Optional[str] = None) -> None:
-        """显示 confidence 历史"""
+        """Show confidence history."""
         cwd = Path.cwd()
         memory_dir = self.get_memory_dir(cwd)
         gep_dir = memory_dir / "gep"
@@ -421,11 +421,11 @@ class OpenClawAlignmentCLI:
             print("📋 No genes found. Confidence history will be built as you execute tasks.")
             return
 
-        # 过滤 genes
+        # Filter genes
         if task_type:
             relevant_genes = [g for g in genes.values() if task_type in g.trigger]
         else:
-            # 显示所有 confidence > 0.5 的 Gene
+            # Show all genes with confidence > 0.5
             relevant_genes = [g for g in genes.values() if g.confidence > 0.5]
 
         if not relevant_genes:
@@ -435,7 +435,7 @@ class OpenClawAlignmentCLI:
                 print("📋 No high-confidence genes found yet (> 0.5)")
             return
 
-        # 按 confidence 排序
+        # Sort by confidence
         relevant_genes = sorted(relevant_genes, key=lambda g: -g.confidence)
 
         print(f"📊 Confidence History ({len(relevant_genes)} genes)")
@@ -446,13 +446,13 @@ class OpenClawAlignmentCLI:
             print(f"{gene.confidence:<12.2f} {gene.success_streak:<8} {gene.summary}")
         print("")
 
-    def execute_demo(self, task_type: str = "T2", description: str = "运行测试") -> None:
+    def execute_demo(self, task_type: str = "T2", description: str = "run tests") -> None:
         """
-        演示智能确认工作流程
+        Demonstrate the intelligent confirmation flow.
 
         Args:
-            task_type: 任务类型 (T1/T2/T3/T4)
-            description: 任务描述
+            task_type: Task type (T1/T2/T3/T4)
+            description: Task description
         """
         cwd = Path.cwd()
         memory_dir = self.get_memory_dir(cwd)
@@ -468,7 +468,7 @@ class OpenClawAlignmentCLI:
         gep_store = GEPStore(gep_dir)
         conf_engine = IntelligentConfirmation(gep_store)
 
-        # 构建任务上下文
+        # Build task context
         task_context = {
             "task_type": task_type,
             "task_description": description,
@@ -476,52 +476,52 @@ class OpenClawAlignmentCLI:
             "files": []
         }
 
-        print(f"🎯 任务执行演示")
-        print(f"   类型: {task_type}")
-        print(f"   描述: {description}")
+        print("🎯 Task execution demo")
+        print(f"   Type: {task_type}")
+        print(f"   Description: {description}")
         print("")
 
-        # 决策：是否需要确认
+        # Decision: whether confirmation is required
         should_confirm, reason = conf_engine.should_confirm(task_context)
 
         if not should_confirm:
-            # 自动执行
+            # Auto-execute
             explanation = conf_engine.get_explanation(task_context, False, reason)
             print(explanation)
 
-            # 模拟执行成功
-            print(f"⚡ 执行命令: {task_context['command']}")
-            print("✅ 任务完成")
+            # Simulate a successful execution
+            print(f"⚡ Running command: {task_context['command']}")
+            print("✅ Task completed")
 
-            # 记录反馈（自动执行成功）
+            # Record feedback (auto execution success)
             conf_engine.record_feedback(
                 task_context,
                 was_confirmed=False,
                 user_cancelled=False
             )
-            print("📈 Confidence 已提升 (+0.05)")
+            print("📈 Confidence increased (+0.05)")
 
         else:
-            # 需要确认
-            print(f"🤔 需要确认：{reason}")
+            # Confirmation required
+            print(f"🤔 Confirmation required: {reason}")
             print("")
-            response = input("继续执行？[Y/n]: ").strip().lower()
+            response = input("Continue execution? [Y/n]: ").strip().lower()
 
             if response == 'n':
-                print("❌ 用户取消执行")
+                print("❌ User cancelled execution")
 
-                # 记录反馈（用户撤销）
+                # Record feedback (user cancelled)
                 conf_engine.record_feedback(
                     task_context,
                     was_confirmed=True,
                     user_cancelled=True
                 )
-                print("📉 Confidence 已降低 (-0.2)")
+                print("📉 Confidence decreased (-0.2)")
             else:
-                print(f"⚡ 执行命令: {task_context['command']}")
-                print("✅ 任务完成")
+                print(f"⚡ Running command: {task_context['command']}")
+                print("✅ Task completed")
 
-                # 记录反馈（用户确认后执行成功）
+                # Record feedback (user confirmed and succeeded)
                 conf_engine.record_feedback(
                     task_context,
                     was_confirmed=True,
@@ -607,7 +607,7 @@ Examples:
     )
     gene_subparsers = gene_parser.add_subparsers(dest="gene_command", help="Gene actions")
 
-    gene_list_parser = gene_subparsers.add_parser("list", help="List all genes")
+    gene_subparsers.add_parser("list", help="List all genes")
     gene_show_parser = gene_subparsers.add_parser("show", help="Show gene details")
     gene_show_parser.add_argument("gene_id", help="Gene ID")
 
@@ -618,7 +618,7 @@ Examples:
     )
     capsule_subparsers = capsule_parser.add_subparsers(dest="capsule_command", help="Capsule actions")
 
-    capsule_list_parser = capsule_subparsers.add_parser("list", help="List all capsules")
+    capsule_subparsers.add_parser("list", help="List all capsules")
     capsule_show_parser = capsule_subparsers.add_parser("show", help="Show capsule details")
     capsule_show_parser.add_argument("capsule_id", help="Capsule ID")
 
@@ -662,8 +662,8 @@ Examples:
     )
     execute_parser.add_argument(
         "--description",
-        default="运行测试",
-        help="Task description (default: '运行测试')"
+        default="run tests",
+        help="Task description (default: 'run tests')"
     )
 
     args = parser.parse_args()
