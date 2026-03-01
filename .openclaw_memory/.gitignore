@@ -1,0 +1,5 @@
+# OpenClaw Alignment 本地配置
+# 不要提交到版本控制
+config.json
+*.backup
+*.cache

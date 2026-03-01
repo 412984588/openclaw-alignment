@@ -21,13 +21,13 @@
 
 ### Quick Start Demo
 
-![OpenClaw Alignment Quick Start](demo.gif)
+![OpenClaw Alignment Quick Start](quick_start.gif)
 
-> Watch how easy it is to get started with OpenClaw Alignment!
+> Watch how easy it is to get started with OpenClaw Alignment! Just run `openclaw-align init` and you're ready to go.
 
 ### Disaster Recovery Demo
 
-![OpenClaw Alignment Disaster Recovery](demo.gif)
+![OpenClaw Alignment Disaster Recovery](disaster_recovery.gif)
 
 > **场景对比**：未受保护的 Agent 失控（🔴）vs OpenClaw Alignment 阻断（🟢）
 
