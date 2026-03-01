@@ -1,11 +1,19 @@
 #!/usr/bin/env python3
 """
 学习模块 - 从收集的数据中学习用户偏好
+
+支持两种学习模式：
+1. PreferenceLearner: 统计学习（Git历史频率分析）
+2. RLLearner: 强化学习（Actor-Critic在线学习）
 """
 
 import json
-from typing import Dict, List, Any, Tuple
+from typing import Dict, List, Any, Tuple, Optional
 from pathlib import Path
+from datetime import datetime
+
+from .agent import AlignmentAgent, Trajectory
+from .environment import InteractionEnvironment, State, Action
 
 
 class PreferenceLearner:
@@ -160,6 +168,136 @@ class PreferenceLearner:
 """
 
         return report
+
+
+class RLLearner:
+    """
+    强化学习学习器 - 在线学习
+
+    从任务执行中实时学习，使用Actor-Critic算法优化策略
+    """
+
+    def __init__(self, model_path: str = None, config_path: str = None):
+        """
+        初始化RL学习器
+
+        Args:
+            model_path: 模型保存路径
+            config_path: 配置文件路径
+        """
+        self.model_path = model_path or "~/.openclaw/extensions/intent-alignment/models/rl"
+        self.config_path = config_path or "~/.openclaw/extensions/intent-alignment/config/config.json"
+
+        # 初始化环境和智能体
+        self.env = InteractionEnvironment(config_path=self.config_path)
+
+        self.agent = AlignmentAgent(
+            state_dim=self.env.get_state_space_size(),
+            action_dim=self.env.get_action_space_size()
+        )
+
+        # 尝试加载已有模型
+        self._load_model()
+
+        # 当前轨迹
+        self.current_trajectory: Optional[Trajectory] = None
+
+    def _load_model(self) -> None:
+        """加载已有模型"""
+        model_dir = Path(self.model_path).expanduser()
+        if model_dir.exists():
+            try:
+                self.agent.load_model(str(model_dir))
+                print(f"✅ 已加载模型: {model_dir}")
+            except Exception as e:
+                print(f"⚠️  加载模型失败: {e}，使用新模型")
+
+    def learn_from_task(self, task_context: Dict[str, Any],
+                       task_result: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        从单个任务中学习（在线学习）
+
+        Args:
+            task_context: 任务上下文
+            task_result: 任务执行结果
+
+        Returns:
+            学习统计信息
+        """
+        # 1. 重置环境
+        state = self.env.reset(task_context)
+
+        # 2. 选择动作（使用当前策略）
+        action = self.agent.select_action(state, explore=False)
+
+        # 3. 执行动作，获得反馈
+        next_state, reward, done, info = self.env.step(action, task_result)
+
+        # 4. 构建单步轨迹
+        trajectory = Trajectory(
+            states=[state.to_vector()],
+            actions=[action.to_vector(
+                self.env.AGENT_MAP,
+                self.env.AUTOMATION_MAP,
+                self.env.STYLE_MAP
+            )],
+            rewards=[reward],
+            dones=[done],
+            next_states=[next_state.to_vector()]
+        )
+
+        # 5. 更新策略
+        stats = self.agent.update_policy(trajectory)
+
+        # 6. 定期保存模型
+        if self.agent.episode_count % 10 == 0:
+            self.save_model()
+
+        return {
+            "reward": reward,
+            "action_taken": str(action),
+            "agent_used": action.agent_selection.value,
+            **stats
+        }
+
+    def get_recommended_action(self, task_context: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        获取推荐动作（不更新策略）
+
+        Args:
+            task_context: 任务上下文
+
+        Returns:
+            推荐的动作
+        """
+        # 重置环境
+        state = self.env.reset(task_context)
+
+        # 选择动作（不探索）
+        action = self.agent.select_action(state, explore=False)
+
+        return {
+            "agent": action.agent_selection.value,
+            "automation_level": action.automation_level.value,
+            "communication_style": action.communication_style.value,
+            "confirmation_needed": action.confirmation_needed,
+            "confidence": 0.7 + self.env.recent_performance * 0.3  # 基于性能的置信度
+        }
+
+    def save_model(self) -> None:
+        """保存模型"""
+        self.agent.save_model(self.model_path)
+        self.env.save_history(f"{self.model_path}/env_history.json")
+        print(f"✅ 模型已保存: {self.model_path}")
+
+    def get_training_stats(self) -> Dict[str, Any]:
+        """获取训练统计"""
+        return {
+            "episode_count": self.agent.episode_count,
+            "total_steps": self.agent.total_steps,
+            "recent_performance": self.env.recent_performance,
+            "agent_usage": self.env.agent_usage_history
+        }
 
 
 def main():

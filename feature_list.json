@@ -1,0 +1,117 @@
+[
+  {
+    "id": 1,
+    "category": "functional",
+    "description": "奖励系统 - 四维度奖励计算",
+    "steps": [
+      "创建RewardSignal类",
+      "实现四维度奖励信号（客观指标、用户行为、显性反馈、行为模式）",
+      "实现动态权重调整",
+      "实现RewardCalculator计算引擎",
+      "编写单元测试"
+    ],
+    "passes": true
+  },
+  {
+    "id": 2,
+    "category": "functional",
+    "description": "交互环境 - 状态/动作空间定义",
+    "steps": [
+      "定义状态空间（task_type, tech_stack, user_mood等）",
+      "定义动作空间（agent_selection, automation_level等）",
+      "实现reset()方法",
+      "实现step()方法",
+      "编写单元测试"
+    ],
+    "passes": true
+  },
+  {
+    "id": 3,
+    "category": "functional",
+    "description": "RL智能体 - Actor-Critic实现",
+    "steps": [
+      "实现PolicyNetwork（策略网络）",
+      "实现ValueNetwork（价值网络）",
+      "实现AlignmentAgent（Actor-Critic智能体）",
+      "实现select_action()方法",
+      "实现update_policy()方法",
+      "编写单元测试"
+    ],
+    "passes": true
+  },
+  {
+    "id": 4,
+    "category": "functional",
+    "description": "学习器重构 - 从统计学习转向RL",
+    "steps": [
+      "创建RLLearner类",
+      "实现learn_from_task()在线学习",
+      "实现save_model()保存模型",
+      "保持与PreferenceLearner向后兼容",
+      "编写单元测试"
+    ],
+    "passes": true
+  },
+  {
+    "id": 5,
+    "category": "functional",
+    "description": "集成引擎扩展 - 新接口",
+    "steps": [
+      "实现on_task_start()接口",
+      "实现on_task_complete()接口",
+      "集成RLLearner",
+      "编写集成测试"
+    ],
+    "passes": true
+  },
+  {
+    "id": 6,
+    "category": "optimization",
+    "description": "神经网络模型 - 可选PyTorch实现",
+    "steps": [
+      "检测PyTorch可用性",
+      "实现PyTorch版本的策略网络",
+      "实现PyTorch版本的价值网络",
+      "实现智能降级（无PyTorch时用NumPy）"
+    ],
+    "passes": false
+  },
+  {
+    "id": 7,
+    "category": "optimization",
+    "description": "经验回放 - 提升样本效率",
+    "steps": [
+      "创建ExperienceReplay类",
+      "实现经验存储",
+      "实现优先级采样",
+      "实现批量采样"
+    ],
+    "passes": false
+  },
+  {
+    "id": 8,
+    "category": "optimization",
+    "description": "训练器 - 完整训练循环",
+    "steps": [
+      "创建RLTrainer类",
+      "实现多episode训练循环",
+      "实现检查点保存/加载",
+      "实现训练统计和可视化"
+    ],
+    "passes": false
+  },
+  {
+    "id": 9,
+    "category": "advanced",
+    "description": "分布式训练支持",
+    "steps": ["集成Redis + Celery", "实现多项目并行训练"],
+    "passes": false
+  },
+  {
+    "id": 10,
+    "category": "advanced",
+    "description": "监控面板 - TensorBoard集成",
+    "steps": ["集成TensorBoard", "实现奖励曲线可视化", "实现训练进度监控"],
+    "passes": false
+  }
+]

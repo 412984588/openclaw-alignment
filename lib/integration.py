@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Dict, Any
 
 from .collector import GitPreferenceCollector
-from .learner import PreferenceLearner
+from .learner import PreferenceLearner, RLLearner
 
 
 class IntentAlignmentEngine:
@@ -91,6 +91,100 @@ class IntentAlignmentEngine:
             backup = self.config_path.with_suffix('.backup.json')
             self.config_path.rename(backup)
             print(f"✅ 偏好已重置，备份保存在: {backup}")
+
+
+class RLAlignmentEngine(IntentAlignmentEngine):
+    """
+    强化学习对齐引擎 - 扩展IntentAlignmentEngine
+
+    新增RL在线学习接口：
+    - on_task_start(): 任务开始时获取推荐策略
+    - on_task_complete(): 任务完成时更新模型
+    """
+
+    def __init__(self, repo_path: str = ".", config_path: str = None, use_rl: bool = True):
+        """
+        初始化RL对齐引擎
+
+        Args:
+            repo_path: Git仓库路径
+            config_path: 配置文件路径
+            use_rl: 是否使用强化学习
+        """
+        # 初始化父类
+        super().__init__(repo_path, config_path)
+
+        # 初始化RL学习器
+        self.use_rl = use_rl
+        if use_rl:
+            self.rl_learner = RLLearner(
+                model_path=f"{self.config_path.parent}/models/rl",
+                config_path=str(self.config_path)
+            )
+
+    def on_task_start(self, task_context: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        任务开始时调用 - 获取推荐策略
+
+        Args:
+            task_context: 任务上下文，包含：
+                - task_type: 任务类型
+                - tech_stack: 技术栈
+                - description: 任务描述
+
+        Returns:
+            推荐的策略
+        """
+        if not self.use_rl:
+            return {}
+
+        # 获取推荐动作
+        recommendation = self.rl_learner.get_recommended_action(task_context)
+
+        print(f"🤖 RL推荐: {recommendation['agent']} | "
+              f"自动化: {recommendation['automation_level']} | "
+              f"风格: {recommendation['communication_style']}")
+
+        return recommendation
+
+    def on_task_complete(self, task_context: Dict[str, Any],
+                         task_result: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        任务完成时调用 - 更新模型
+
+        Args:
+            task_context: 任务上下文
+            task_result: 任务执行结果
+
+        Returns:
+            学习统计
+        """
+        if not self.use_rl:
+            return {}
+
+        print(f"📊 正在从任务中学习...")
+
+        # 从任务中学习
+        stats = self.rl_learner.learn_from_task(task_context, task_result)
+
+        print(f"✅ 学习完成: 奖励={stats['reward']:.3f}")
+
+        return stats
+
+    def get_training_progress(self) -> Dict[str, Any]:
+        """获取训练进度"""
+        if not self.use_rl:
+            return {"mode": "statistical"}
+
+        stats = self.rl_learner.get_training_stats()
+
+        return {
+            "mode": "reinforcement_learning",
+            "episodes": stats["episode_count"],
+            "steps": stats["total_steps"],
+            "performance": stats["recent_performance"],
+            "agent_usage": stats["agent_usage"]
+        }
 
 
 def main():
