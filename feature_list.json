@@ -74,7 +74,7 @@
       "实现PyTorch版本的价值网络",
       "实现智能降级（无PyTorch时用NumPy）"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 7,
@@ -86,7 +86,7 @@
       "实现优先级采样",
       "实现批量采样"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 8,
@@ -98,7 +98,7 @@
       "实现检查点保存/加载",
       "实现训练统计和可视化"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 9,
