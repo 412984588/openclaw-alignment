@@ -135,6 +135,27 @@ class TestInteractionEnvironment:
         assert state.user_mood[0] == 1.0  # focused
         assert state.time_of_day == pytest.approx(12.0 / 24.0)  # noon
 
+    def test_reset_invalid_task_type_fallback_to_t2(self):
+        """测试非法task_type自动回退到T2"""
+        env = InteractionEnvironment()
+        state = env.reset({"task_type": "INVALID", "tech_stack": ["python"]})
+        assert state.task_type[1] == 1.0  # T2
+        assert env.current_task_context["task_type"] == "T2"
+
+    def test_reset_clamps_time_of_day_into_valid_range(self):
+        """测试time_of_day被限制在[0, 24]后再归一化"""
+        env = InteractionEnvironment()
+        state_early = env.reset({"task_type": "T2", "time_of_day": -3})
+        state_late = env.reset({"task_type": "T2", "time_of_day": 30})
+        assert state_early.time_of_day == 0.0
+        assert state_late.time_of_day == 1.0
+
+    def test_reset_invalid_time_of_day_uses_default_noon(self):
+        """测试非法time_of_day输入回退到默认中午"""
+        env = InteractionEnvironment()
+        state = env.reset({"task_type": "T2", "time_of_day": "not-a-number"})
+        assert state.time_of_day == pytest.approx(0.5)
+
     def test_step(self):
         """测试执行步骤"""
         env = InteractionEnvironment()
@@ -172,6 +193,42 @@ class TestInteractionEnvironment:
 
         # 检查Agent使用历史已更新
         assert env.agent_usage_history["claude"] == 1
+
+    def test_step_without_reset_raises_value_error(self):
+        """测试未reset直接step会抛出明确错误"""
+        env = InteractionEnvironment()
+        action = Action(
+            agent_selection=AgentType.CLAUDE,
+            automation_level=AutomationLevel.MEDIUM,
+            communication_style=CommunicationStyle.DETAILED,
+            confirmation_needed=True
+        )
+        with pytest.raises(ValueError, match="reset"):
+            env.step(action, {"completed": True})
+
+    def test_step_done_updates_episode_stats(self):
+        """测试完成任务后更新episode统计"""
+        env = InteractionEnvironment()
+        env.reset({"task_type": "T2", "tech_stack": ["python"]})
+        action = Action(
+            agent_selection=AgentType.CLAUDE,
+            automation_level=AutomationLevel.MEDIUM,
+            communication_style=CommunicationStyle.DETAILED,
+            confirmation_needed=True
+        )
+        _, reward, done, _ = env.step(
+            action,
+            {
+                "duration": 100,
+                "completed": True,
+                "test_result": {},
+                "user_feedback": {},
+                "metrics": {},
+            },
+        )
+        assert done is True
+        assert env.episode_count == 1
+        assert env.episode_rewards[-1] == pytest.approx(reward)
 
     def test_multi_episode(self):
         """测试多episode运行"""

@@ -11,16 +11,18 @@ import json
 from typing import Dict, List, Any, Tuple, Optional
 from pathlib import Path
 from datetime import datetime
+from collections import defaultdict
 
 from .agent import AlignmentAgent, Trajectory
 from .environment import InteractionEnvironment, State, Action
+from .paths import resolve_config_path, resolve_model_dir
 
 
 class PreferenceLearner:
     """偏好学习算法"""
 
     def __init__(self, config_path: str = None):
-        self.config_path = config_path or "~/.openclaw/extensions/intent-alignment/config/config.json"
+        self.config_path = str(resolve_config_path(config_path))
         self.learned_preferences = {}
 
     def learn_from_git_history(self, git_data: Dict[str, Any]) -> Dict[str, Any]:
@@ -185,8 +187,8 @@ class RLLearner:
             model_path: 模型保存路径
             config_path: 配置文件路径
         """
-        self.model_path = model_path or "~/.openclaw/extensions/intent-alignment/models/rl"
-        self.config_path = config_path or "~/.openclaw/extensions/intent-alignment/config/config.json"
+        self.model_path = str(resolve_model_dir(model_path))
+        self.config_path = str(resolve_config_path(config_path))
 
         # 初始化环境和智能体
         self.env = InteractionEnvironment(config_path=self.config_path)
@@ -201,6 +203,13 @@ class RLLearner:
 
         # 当前轨迹
         self.current_trajectory: Optional[Trajectory] = None
+
+        # 历史偏好统计（task_type + 选择维度）
+        self._agent_reward_history: Dict[Tuple[str, str], List[float]] = defaultdict(list)
+        self._workflow_reward_history: Dict[Tuple[str, str], List[float]] = defaultdict(list)
+
+        # 契约：奖励系统优先读取学习器历史
+        self.env.reward_calculator.set_history_provider(self)
 
     def _load_model(self) -> None:
         """加载已有模型"""
@@ -240,6 +249,14 @@ class RLLearner:
             rewards=[reward],
             dones=[done],
             next_states=[next_state.to_vector()]
+        )
+
+        # 4.1 记录偏好历史（用于后续奖励计算）
+        self.record_preference_result(
+            task_type=task_context.get("task_type", "T2"),
+            agent=action.agent_selection.value,
+            workflow=task_result.get("workflow", "standard"),
+            reward=reward,
         )
 
         # 5. 更新策略
@@ -294,6 +311,26 @@ class RLLearner:
             "recent_performance": self.env.recent_performance,
             "agent_usage": self.env.agent_usage_history
         }
+
+    def record_preference_result(self, task_type: str, agent: str, workflow: str, reward: float) -> None:
+        """记录任务结果到偏好历史"""
+        reward_clipped = max(0.0, min(1.0, float(reward)))
+        self._agent_reward_history[(task_type, agent)].append(reward_clipped)
+        self._workflow_reward_history[(task_type, workflow)].append(reward_clipped)
+
+    def get_agent_success_rate(self, task_type: str, agent: str) -> Optional[float]:
+        """提供Agent历史成功率（奖励均值）"""
+        rewards = self._agent_reward_history.get((task_type, agent))
+        if not rewards:
+            return None
+        return float(sum(rewards) / len(rewards))
+
+    def get_workflow_success_rate(self, task_type: str, workflow: str) -> Optional[float]:
+        """提供工作流历史成功率（奖励均值）"""
+        rewards = self._workflow_reward_history.get((task_type, workflow))
+        if not rewards:
+            return None
+        return float(sum(rewards) / len(rewards))
 
 
 def main():

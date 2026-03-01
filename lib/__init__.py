@@ -47,6 +47,13 @@ from .performance_optimizer import (
     JITOptimizer,
     PerformanceOptimizer
 )
+from .paths import (
+    get_config_dir,
+    get_cache_dir,
+    get_state_dir,
+    resolve_config_path,
+    resolve_model_dir,
+)
 
 __all__ = [
     # Phase 1
@@ -68,6 +75,8 @@ __all__ = [
     "TrainingMonitor", "MetricsAnalyzer", "TENSORBOARD_AVAILABLE",
     "BatchInference", "ModelQuantization", "InferenceCache",
     "JITOptimizer", "PerformanceOptimizer",
+    "get_config_dir", "get_cache_dir", "get_state_dir",
+    "resolve_config_path", "resolve_model_dir",
 ]
 
-__version__ = "3.0.0"
+__version__ = "1.0.0"

@@ -39,11 +39,30 @@ __pycache__/
 *$py.class
 *.so
 .Python
+.venv/
+venv/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
 
 # 测试覆盖率
 coverage/
 .nyc_output/
+.coverage*
+htmlcov/
 
 # 构建产物
 dist/
 build/
+*.egg-info/
+pip-wheel-metadata/
+
+# 训练产物
+models/**/final/
+models/**/checkpoint_*/
+
+# Local config / secrets
+.env
+.env.*
+config/local*.json
+config/*secret*.json

@@ -435,5 +435,33 @@ class TestRewardCollectors:
         assert preference < 0.8
 
 
+class StubHistoryProvider:
+    """测试用历史提供器"""
+
+    def __init__(self, agent_rate: float = None, workflow_rate: float = None):
+        self.agent_rate = agent_rate
+        self.workflow_rate = workflow_rate
+
+    def get_agent_success_rate(self, task_type: str, agent: str):
+        return self.agent_rate
+
+    def get_workflow_success_rate(self, task_type: str, workflow: str):
+        return self.workflow_rate
+
+
+class TestRewardHistoryProvider:
+    """测试历史偏好提供器接入"""
+
+    def test_history_provider_overrides_agent_preference(self):
+        calc = RewardCalculator(history_provider=StubHistoryProvider(agent_rate=0.92))
+        context = {"task_type": "T3", "task_result": {"agent": "codex"}}
+        assert calc._collect_agent_preference(context) == pytest.approx(0.92)
+
+    def test_history_provider_overrides_workflow_preference(self):
+        calc = RewardCalculator(history_provider=StubHistoryProvider(workflow_rate=0.88))
+        context = {"task_type": "T2", "task_result": {"workflow": "tdd"}}
+        assert calc._collect_workflow_preference(context) == pytest.approx(0.88)
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

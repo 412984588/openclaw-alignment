@@ -60,6 +60,27 @@ class TestDistributedTrainer:
         assert "total_projects" in results
         assert results["total_projects"] == 1
 
+    def test_fallback_when_runtime_unreachable(self):
+        """测试依赖存在但分布式运行时不可达时自动降级"""
+        from lib.distributed_trainer import (
+            DistributedTrainer,
+            DistributedTrainingConfig,
+            REDIS_AVAILABLE,
+            CELERY_AVAILABLE,
+        )
+
+        if not (REDIS_AVAILABLE and CELERY_AVAILABLE):
+            pytest.skip("Redis/Celery not installed in this environment")
+
+        config = DistributedTrainingConfig(
+            redis_host="127.0.0.1",
+            redis_port=1,  # deliberately unreachable
+            require_worker=True,
+            connection_timeout=0.2,
+        )
+        trainer = DistributedTrainer(config)
+        assert trainer.distributed_enabled is False
+
 
 class TestHyperparameterTuner:
     """超参数调优器测试"""

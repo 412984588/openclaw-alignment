@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 from lib.agent import PolicyNetwork, AlignmentAgent
 from lib.environment import Action, AgentType, AutomationLevel, CommunicationStyle
 
@@ -41,3 +42,23 @@ def test_action_roundtrip_indices():
     )
     indices = agent.encode_action_indices(action)
     assert agent.decode_action_indices(indices) == action
+
+
+def test_decode_action_indices_invalid_shape_or_range():
+    agent = AlignmentAgent(state_dim=17, action_dim=11)
+    with pytest.raises(ValueError):
+        agent.decode_action_indices(np.array([0, 0, 0], dtype=int))
+    with pytest.raises(ValueError):
+        agent.decode_action_indices(np.array([3, 0, 0, 0], dtype=int))
+
+
+def test_policy_no_explore_is_deterministic():
+    policy = PolicyNetwork(state_dim=17)
+    for key in policy.weights:
+        policy.weights[key].fill(0.0)
+        policy.bias[key].fill(0.0)
+    state = np.ones(17, dtype=np.float32)
+    first, _ = policy.sample_action(state, explore=False)
+    for _ in range(20):
+        current, _ = policy.sample_action(state, explore=False)
+        assert np.array_equal(current, first)

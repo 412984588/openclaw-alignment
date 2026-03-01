@@ -1,153 +1,103 @@
 # OpenClaw 意图对齐系统
 
-> **强化学习驱动的智能对齐系统**
+> 强化学习驱动的工作流对齐引擎（Actor-Critic）
 
 **[English](README_EN.md)** | **简体中文**
 
-基于Actor-Critic强化学习框架，自动学习用户偏好，优化OpenClaw的工作流决策。
+## 特性
 
-## 🎯 核心特性
+- Actor-Critic 强化学习主链路
+- 四维度奖励系统（客观指标/行为信号/显性反馈/模式偏好）
+- 可选 Phase3（分布式训练、自动调参、监控、性能优化）
+- 契约防漂移检查（状态/动作维度与文档一致性）
+- 跨平台支持：Windows / macOS / Linux
 
-- **Actor-Critic强化学习** - 完整的RL算法实现
-- **四维度奖励系统** - 客观指标+用户行为+显性反馈+行为模式
-- **神经网络优化** - PyTorch集成，智能降级到NumPy
-- **分布式训练** - Redis + Celery支持多项目并行
-- **自动调参** - 网格/随机/贝叶斯超参数搜索
-- **实时监控** - TensorBoard集成，训练可视化
-- **性能优化** - 模型量化、批量推理、LRU缓存
+## 支持矩阵
 
-## 🚀 快速开始
+- Python: 3.10, 3.11, 3.12, 3.13
+- OS: Windows, macOS, Linux
 
-### 安装
+## 安装
+
+### 1) PyPI（推荐）
 
 ```bash
-# 克隆仓库
-git clone <repository_url>
+pip install openclaw-alignment
+```
+
+可选 Phase3 依赖：
+
+```bash
+pip install "openclaw-alignment[phase3]"
+```
+
+### 2) 源码安装
+
+```bash
+git clone https://github.com/412984588/openclaw-alignment.git
 cd openclaw-alignment
-
-# 安装核心依赖（Phase 1-2）
-pip install -r requirements.txt
-
-# 安装完整依赖（Phase 3，可选）
-pip install -r requirements-full.txt
+python3 scripts/install.py
 ```
 
-### 测试
+开发安装：
 
 ```bash
-# 运行所有测试
-python3 -m pytest tests/ -v
-
-# 运行特定phase测试
-python3 -m pytest tests/test_phase3.py -v
+python3 scripts/install.py --dev --editable
 ```
 
-## 📖 系统架构
+## 快速验证
 
-### Phase 1: 核心功能 (2600行)
+```bash
+python3 -m pytest tests/ -v
+python3 scripts/check_docs_consistency.py
+openclaw-alignment --help
+```
 
-- **lib/reward.py** - 四维度奖励系统
-  - RewardSignal: 单个奖励信号
-  - RewardCalculator: 多维度奖励计算
-  - 动态权重调整：负向反馈自动调整策略
+## 架构
 
-- **lib/environment.py** - OpenClaw交互环境
+### Core（Phase 1-2）
+
+- `lib/reward.py`: 四维度奖励计算
+- `lib/environment.py`: 交互环境
   - State: 状态数据类（17维）
-  - Action: 动作数据类（10维）
-  - InteractionEnvironment: Gym风格环境（reset/step）
+  - Action: 动作数据类（11维）
+- `lib/agent.py`: Actor-Critic 智能体
+- `lib/learner.py`: 在线学习器
+- `lib/trainer.py`: 训练循环
+- `lib/contracts.py`: 维度契约唯一来源
 
-- **lib/agent.py** - Actor-Critic智能体
-  - PolicyNetwork: 策略网络（线性模型）
-  - ValueNetwork: 价值网络（线性模型）
-  - AlignmentAgent: Actor-Critic算法实现
+### Optional（Phase 3）
 
-- **lib/learner.py** - 强化学习学习器
-  - RLLearner: 在线学习类
-  - 保持PreferenceLearner向后兼容
+- `lib/distributed_trainer.py`
+- `lib/hyperparameter_tuner.py`
+- `lib/monitoring.py`
+- `lib/performance_optimizer.py`
 
-- **lib/integration.py** - OpenClaw集成
-  - RLAlignmentEngine: 扩展IntentAlignmentEngine
-  - on_task_start(): 任务开始时获取推荐
-  - on_task_complete(): 任务完成时更新模型
+## 文档
 
-### Phase 2: 优化功能 (841行)
+- 架构：`docs/architecture.zh-CN.md`
+- 奖励模型：`docs/reward-model.zh-CN.md`
+- 配置：`docs/configuration.zh-CN.md`
+- 可选依赖：`docs/phase3-optional-deps.zh-CN.md`
+- 贡献：`CONTRIBUTING.zh-CN.md`
+- 安全：`SECURITY.zh-CN.md`
+- 支持：`SUPPORT.zh-CN.md`
 
-- **lib/nn_model.py** - 可选PyTorch神经网络
-  - MLPModel: 多层感知机（128→128→output）
-  - PolicyNetworkPyTorch: PyTorch策略网络
-  - ValueNetworkPyTorch: PyTorch价值网络
-  - 智能降级：PyTorch不可用时自动使用NumPy
+## 测试覆盖
 
-- **lib/experience_replay.py** - 经验回放缓冲区
-  - Experience: 单个经验数据类
-  - ExperienceReplay: 经验回放缓冲区（容量10000）
-  - 优先级采样（PER）
-
-- **lib/trainer.py** - 完整训练循环
-  - RLTrainer: 训练器主类
-  - 多episode训练循环
-  - 检查点自动保存/加载
-  - 训练统计和可视化
-
-### Phase 3: 高级功能 (2238行)
-
-- **lib/distributed_trainer.py** - 分布式训练支持
-  - DistributedTrainer: Redis + Celery分布式训练
-  - 智能降级：依赖不可用时使用单机模式
-  - 多项目并行训练
-  - 训练任务状态跟踪
-
-- **lib/hyperparameter_tuner.py** - 自动调参系统
-  - LearningRateScheduler: 4种学习率调度策略
-  - HyperparameterSearch: 网格/随机/贝叶斯搜索
-  - EarlyStopping: 早停机制
-  - 超参数重要性分析
-
-- **lib/monitoring.py** - 监控面板
-  - TrainingMonitor: TensorBoard集成
-  - 指标追踪和可视化
-  - MetricsAnalyzer: 学习曲线分析
-  - 收敛检测和平台期检测
-
-- **lib/performance_optimizer.py** - 性能优化
-  - BatchInference: 批量推理
-  - ModelQuantization: 模型量化（int8/int16）
-  - InferenceCache: LRU推理缓存
-  - JITOptimizer: Numba JIT编译优化
-
-## 📊 测试覆盖
-
-- **总测试数**: 56个
+- **总测试数**: 80个
 - **通过率**: 100%
-- **Phase 1**: 33个测试 ✅
-- **Phase 2**: 3个测试 ✅
-- **Phase 3**: 20个测试 ✅
+- **核心RL与集成**: 54个测试 ✅
+- **Phase 2**: 1个测试 ✅
+- **Phase 3**: 21个测试 ✅
+- **文档/契约防漂移**: 4个测试 ✅
 
-## 🔧 技术栈
+## 发布与版本
 
-- **RL算法**: Actor-Critic (A2C)
-- **深度学习**: PyTorch（可选），NumPy
-- **分布式**: Redis + Celery（可选）
-- **监控**: TensorBoard（可选）
-- **测试**: pytest
+- 版本策略：SemVer（稳定分支：`release/1.0.x`）
+- 发布流程：见 `RELEASING.zh-CN.md` / `RELEASING.md`
+- 变更记录：`CHANGELOG.md`
 
-## 📈 性能指标
+## 许可证
 
-- **训练收敛**: 平均奖励0.82±0.07（100 episodes）
-- **模型量化**: 压缩率75%（float32→int8）
-- **批量推理**: 吞吐量提升3倍
-- **缓存命中率**: 80%+（常见状态）
-
-## 🤝 贡献
-
-欢迎提交Issue和Pull Request！
-
-## 📄 许可证
-
-MIT License
-
----
-
-**版本**: v3.0.0
-**最后更新**: 2026-03-01
-**总代码量**: 5459行
+MIT

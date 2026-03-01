@@ -3,15 +3,13 @@
 OpenClaw集成模块 - 连接数据收集、学习和配置更新
 """
 
-import os
-import sys
 import json
-import subprocess
 from pathlib import Path
 from typing import Dict, Any
 
 from .collector import GitPreferenceCollector
 from .learner import PreferenceLearner, RLLearner
+from .paths import resolve_config_path, resolve_model_dir
 
 
 class IntentAlignmentEngine:
@@ -19,8 +17,7 @@ class IntentAlignmentEngine:
 
     def __init__(self, repo_path: str = ".", config_path: str = None):
         self.repo_path = Path(repo_path).resolve()
-        self.config_path = config_path or "~/.openclaw/extensions/intent-alignment/config/config.json"
-        self.config_path = Path(self.config_path).expanduser()
+        self.config_path = resolve_config_path(config_path)
 
         # 初始化组件
         self.collector = GitPreferenceCollector(str(self.repo_path))
@@ -46,7 +43,7 @@ class IntentAlignmentEngine:
         self.learner.save_preferences()
 
         # 步骤4: 生成报告
-        report = self.learner.generate_report()
+        self.learner.generate_report()
 
         # 步骤5: 显示总结
         print("\n" + "="*50)
@@ -75,13 +72,21 @@ class IntentAlignmentEngine:
     def update_preferences(self, new_data: Dict[str, Any]) -> None:
         """增量更新偏好"""
         current = self.get_current_preferences()
-
-        # 合并新数据
         current.update(new_data)
 
-        # 保存
+        # 保持配置结构稳定，避免覆盖顶层字段
+        config: Dict[str, Any]
+        if self.config_path.exists():
+            with open(self.config_path, 'r') as f:
+                config = json.load(f)
+        else:
+            config = {"version": "1.0.0"}
+
+        config["learned_preferences"] = current
+
+        self.config_path.parent.mkdir(parents=True, exist_ok=True)
         with open(self.config_path, 'w') as f:
-            json.dump(current, f, indent=2, ensure_ascii=False)
+            json.dump(config, f, indent=2, ensure_ascii=False)
 
         print("✅ 偏好已更新")
 
@@ -118,7 +123,7 @@ class RLAlignmentEngine(IntentAlignmentEngine):
         self.use_rl = use_rl
         if use_rl:
             self.rl_learner = RLLearner(
-                model_path=f"{self.config_path.parent}/models/rl",
+                model_path=str(resolve_model_dir()),
                 config_path=str(self.config_path)
             )
 
@@ -192,7 +197,7 @@ def main():
     import argparse
 
     parser = argparse.ArgumentParser(description="意图对齐分析工具")
-    parser.add_argument("--repo", ".", help="Git仓库路径")
+    parser.add_argument("--repo", default=".", help="Git仓库路径")
     parser.add_argument("--commits", type=int, default=100, help="分析的提交数量")
     parser.add_argument("--reset", action="store_true", help="重置偏好")
     parser.add_argument("--show", action="store_true", help="显示当前偏好")
