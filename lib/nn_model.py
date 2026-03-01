@@ -147,11 +147,16 @@ class PolicyNetworkPyTorch:
 
     def save(self, path: str) -> None:
         """保存模型"""
-        torch.save(self.model.state_dict(), path)
+        torch.save({
+            "backbone": self.backbone.state_dict(),
+            "heads": self.heads.state_dict()
+        }, path)
 
     def load(self, path: str) -> None:
         """加载模型"""
-        self.model.load_state_dict(torch.load(path))
+        state = torch.load(path)
+        self.backbone.load_state_dict(state["backbone"])
+        self.heads.load_state_dict(state["heads"])
 
 
 class ValueNetworkPyTorch:
@@ -248,7 +253,7 @@ def create_value_network(state_dim: int, use_pytorch: bool = True):
 def main():
     """测试神经网络模型"""
     state_dim = 17
-    action_dim = 10
+    action_dim = 11
 
     print(f"PyTorch可用: {TORCH_AVAILABLE}")
 
