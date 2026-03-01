@@ -75,6 +75,42 @@ class OpenClawAlignmentCLI:
         # Create memory directory
         memory_dir.mkdir(parents=True, exist_ok=True)
 
+        # Create GEP subdirectory
+        gep_dir = memory_dir / "gep"
+        gep_dir.mkdir(parents=True, exist_ok=True)
+
+        # Check for existing MD files and auto-migrate
+        if not force:
+            user_md = memory_dir / "USER.md"
+            soul_md = memory_dir / "SOUL.md"
+            agents_md = memory_dir / "AGENTS.md"
+
+            if user_md.exists() or soul_md.exists() or agents_md.exists():
+                print("🔄 检测到现有 Markdown 文件，自动迁移到 GEP 格式...")
+                from .md_to_gep import MarkdownToGEPConverter
+                from .gep_store import GEPStore
+
+                gep_store = GEPStore(gep_dir)
+                converter = MarkdownToGEPConverter()
+                converter.migrate_all(memory_dir, gep_store)
+
+        # Initialize empty genes.json and capsules.json if they don't exist
+        from .gep_store import GEPStore
+        gep_store = GEPStore(gep_dir)
+
+        if not gep_store.genes_file.exists() or force:
+            gep_store.save_genes({})
+            print(f"✅ Created: {gep_store.genes_file}")
+
+        if not gep_store.capsules_file.exists() or force:
+            gep_store.save_capsules({})
+            print(f"✅ Created: {gep_store.capsules_file}")
+
+        # Create empty events.jsonl
+        if not gep_store.events_file.exists() or force:
+            gep_store.events_file.touch()
+            print(f"✅ Created: {gep_store.events_file}")
+
         # Copy template files
         success_count = 0
         for target_name, template_name in self.templates.items():
@@ -147,6 +183,7 @@ class OpenClawAlignmentCLI:
         cwd = Path.cwd()
         memory_dir = self.get_memory_dir(cwd)
         config_file = memory_dir / self.config_file_name
+        gep_dir = memory_dir / "gep"
 
         print("📊 OpenClaw Alignment status")
         print("")
@@ -172,6 +209,20 @@ class OpenClawAlignmentCLI:
                 target_file = memory_dir / target_name
                 status = "✅" if target_file.exists() else "❌"
                 print(f"   {status} {target_name}")
+
+            # Check GEP directory
+            print("")
+            print("🧬 GEP Assets:")
+            if gep_dir.exists():
+                from .gep_store import GEPStore
+                gep_store = GEPStore(gep_dir)
+                stats = gep_store.get_stats()
+                print(f"   ✅ gep/ directory")
+                print(f"      Genes: {stats['total_genes']}")
+                print(f"      Capsules: {stats['total_capsules']}")
+                print(f"      Events: {stats['total_events']}")
+            else:
+                print(f"   ❌ gep/ directory (missing)")
         else:
             print("💡 Tip: run 'openclaw-align init' to initialize memory files")
         print("")
@@ -184,6 +235,301 @@ class OpenClawAlignmentCLI:
         print(f"Python: {__import__('sys').version}")
         print(f"Install path: {Path(__file__).parent.parent}")
 
+    def gene_list(self) -> None:
+        """列出所有 Gene"""
+        cwd = Path.cwd()
+        memory_dir = self.get_memory_dir(cwd)
+        gep_dir = memory_dir / "gep"
+
+        if not gep_dir.exists():
+            print("❌ GEP directory not found. Run 'openclaw-align init' first.")
+            return
+
+        from .gep_store import GEPStore
+        gep_store = GEPStore(gep_dir)
+        genes = gep_store.load_genes()
+
+        if not genes:
+            print("📋 No genes found.")
+            return
+
+        print(f"📋 Genes ({len(genes)} total):")
+        print("")
+        for gene_id, gene in genes.items():
+            print(f"   {gene}")
+
+    def gene_show(self, gene_id: str) -> None:
+        """显示 Gene 详情"""
+        cwd = Path.cwd()
+        memory_dir = self.get_memory_dir(cwd)
+        gep_dir = memory_dir / "gep"
+
+        if not gep_dir.exists():
+            print("❌ GEP directory not found. Run 'openclaw-align init' first.")
+            return
+
+        from .gep_store import GEPStore
+        gep_store = GEPStore(gep_dir)
+        gene = gep_store.get_gene(gene_id)
+
+        if not gene:
+            print(f"❌ Gene not found: {gene_id}")
+            return
+
+        print(f"📄 Gene Details: {gene.id}")
+        print("")
+        print(f"Summary: {gene.summary}")
+        print(f"Category: {gene.category}")
+        print(f"Confidence: {gene.confidence:.2f}")
+        print(f"Success Streak: {gene.success_streak}")
+        print(f"Asset ID: {gene.asset_id}")
+        print("")
+        print(f"Strategy:")
+        print(gene.strategy)
+        if gene.trigger:
+            print("")
+            print(f"Triggers: {', '.join(gene.trigger)}")
+        if gene.preconditions:
+            print("")
+            print(f"Preconditions:")
+            for cond in gene.preconditions:
+                print(f"  - {cond}")
+        if gene.postconditions:
+            print("")
+            print(f"Postconditions:")
+            for cond in gene.postconditions:
+                print(f"  - {cond}")
+        if gene.validation:
+            print("")
+            print(f"Validation:")
+            for test in gene.validation:
+                print(f"  - {test}")
+
+    def capsule_list(self) -> None:
+        """列出所有 Capsule"""
+        cwd = Path.cwd()
+        memory_dir = self.get_memory_dir(cwd)
+        gep_dir = memory_dir / "gep"
+
+        if not gep_dir.exists():
+            print("❌ GEP directory not found. Run 'openclaw-align init' first.")
+            return
+
+        from .gep_store import GEPStore
+        gep_store = GEPStore(gep_dir)
+        capsules = gep_store.load_capsules()
+
+        if not capsules:
+            print("📋 No capsules found.")
+            return
+
+        print(f"📋 Capsules ({len(capsules)} total):")
+        print("")
+        for capsule_id, capsule in capsules.items():
+            print(f"   {capsule}")
+
+    def capsule_show(self, capsule_id: str) -> None:
+        """显示 Capsule 详情"""
+        cwd = Path.cwd()
+        memory_dir = self.get_memory_dir(cwd)
+        gep_dir = memory_dir / "gep"
+
+        if not gep_dir.exists():
+            print("❌ GEP directory not found. Run 'openclaw-align init' first.")
+            return
+
+        from .gep_store import GEPStore
+        gep_store = GEPStore(gep_dir)
+        capsule = gep_store.get_capsule(capsule_id)
+
+        if not capsule:
+            print(f"❌ Capsule not found: {capsule_id}")
+            return
+
+        print(f"📄 Capsule Details: {capsule.id}")
+        print("")
+        print(f"Summary: {capsule.summary}")
+        print(f"Category: {capsule.category}")
+        print(f"Confidence: {capsule.confidence:.2f}")
+        print(f"Asset ID: {capsule.asset_id}")
+        print("")
+        if capsule.genes_used:
+            print(f"Genes Used ({len(capsule.genes_used)}):")
+            for gene_id in capsule.genes_used:
+                print(f"  - {gene_id}")
+        else:
+            print("Genes Used: (none)")
+        if capsule.trigger:
+            print("")
+            print(f"Triggers: {', '.join(capsule.trigger)}")
+
+    def events_show(self, limit: int = 20) -> None:
+        """显示最近进化记录"""
+        cwd = Path.cwd()
+        memory_dir = self.get_memory_dir(cwd)
+        gep_dir = memory_dir / "gep"
+
+        if not gep_dir.exists():
+            print("❌ GEP directory not found. Run 'openclaw-align init' first.")
+            return
+
+        from .gep_store import GEPStore
+        gep_store = GEPStore(gep_dir)
+        events = gep_store.get_events(limit)
+
+        if not events:
+            print("📋 No events found.")
+            return
+
+        print(f"📋 Recent Evolution Events ({len(events)} shown):")
+        print("")
+        for event in events:
+            print(f"   {event}")
+
+    def export_md(self) -> None:
+        """从 Gene/Capsule 导出 Markdown 格式（兼容模式）"""
+        cwd = Path.cwd()
+        memory_dir = self.get_memory_dir(cwd)
+        gep_dir = memory_dir / "gep"
+
+        if not gep_dir.exists():
+            print("❌ GEP directory not found. Run 'openclaw-align init' first.")
+            return
+
+        from .gep_to_md import GEPToMarkdownExporter
+        exporter = GEPToMarkdownExporter()
+        exporter.export_all(gep_dir, memory_dir)
+
+        print("")
+        print("✨ Markdown files exported successfully!")
+
+    def confidence_history(self, task_type: Optional[str] = None) -> None:
+        """显示 confidence 历史"""
+        cwd = Path.cwd()
+        memory_dir = self.get_memory_dir(cwd)
+        gep_dir = memory_dir / "gep"
+
+        if not gep_dir.exists():
+            print("❌ GEP directory not found. Run 'openclaw-align init' first.")
+            return
+
+        from .gep_store import GEPStore
+        gep_store = GEPStore(gep_dir)
+        genes = gep_store.load_genes()
+
+        if not genes:
+            print("📋 No genes found. Confidence history will be built as you execute tasks.")
+            return
+
+        # 过滤 genes
+        if task_type:
+            relevant_genes = [g for g in genes.values() if task_type in g.trigger]
+        else:
+            # 显示所有 confidence > 0.5 的 Gene
+            relevant_genes = [g for g in genes.values() if g.confidence > 0.5]
+
+        if not relevant_genes:
+            if task_type:
+                print(f"📋 No genes found for task type: {task_type}")
+            else:
+                print("📋 No high-confidence genes found yet (> 0.5)")
+            return
+
+        # 按 confidence 排序
+        relevant_genes = sorted(relevant_genes, key=lambda g: -g.confidence)
+
+        print(f"📊 Confidence History ({len(relevant_genes)} genes)")
+        print("")
+        print(f"{'Confidence':<12} {'Streak':<8} {'Gene Summary'}")
+        print("-" * 60)
+        for gene in relevant_genes:
+            print(f"{gene.confidence:<12.2f} {gene.success_streak:<8} {gene.summary}")
+        print("")
+
+    def execute_demo(self, task_type: str = "T2", description: str = "运行测试") -> None:
+        """
+        演示智能确认工作流程
+
+        Args:
+            task_type: 任务类型 (T1/T2/T3/T4)
+            description: 任务描述
+        """
+        cwd = Path.cwd()
+        memory_dir = self.get_memory_dir(cwd)
+        gep_dir = memory_dir / "gep"
+
+        if not gep_dir.exists():
+            print("❌ GEP directory not found. Run 'openclaw-align init' first.")
+            return
+
+        from .gep_store import GEPStore
+        from .confirmation import IntelligentConfirmation
+
+        gep_store = GEPStore(gep_dir)
+        conf_engine = IntelligentConfirmation(gep_store)
+
+        # 构建任务上下文
+        task_context = {
+            "task_type": task_type,
+            "task_description": description,
+            "command": f"npm run {description}",
+            "files": []
+        }
+
+        print(f"🎯 任务执行演示")
+        print(f"   类型: {task_type}")
+        print(f"   描述: {description}")
+        print("")
+
+        # 决策：是否需要确认
+        should_confirm, reason = conf_engine.should_confirm(task_context)
+
+        if not should_confirm:
+            # 自动执行
+            explanation = conf_engine.get_explanation(task_context, False, reason)
+            print(explanation)
+
+            # 模拟执行成功
+            print(f"⚡ 执行命令: {task_context['command']}")
+            print("✅ 任务完成")
+
+            # 记录反馈（自动执行成功）
+            conf_engine.record_feedback(
+                task_context,
+                was_confirmed=False,
+                user_cancelled=False
+            )
+            print("📈 Confidence 已提升 (+0.05)")
+
+        else:
+            # 需要确认
+            print(f"🤔 需要确认：{reason}")
+            print("")
+            response = input("继续执行？[Y/n]: ").strip().lower()
+
+            if response == 'n':
+                print("❌ 用户取消执行")
+
+                # 记录反馈（用户撤销）
+                conf_engine.record_feedback(
+                    task_context,
+                    was_confirmed=True,
+                    user_cancelled=True
+                )
+                print("📉 Confidence 已降低 (-0.2)")
+            else:
+                print(f"⚡ 执行命令: {task_context['command']}")
+                print("✅ 任务完成")
+
+                # 记录反馈（用户确认后执行成功）
+                conf_engine.record_feedback(
+                    task_context,
+                    was_confirmed=True,
+                    user_cancelled=False
+                )
+
+        print("")
+
 
 def main():
     """CLI entrypoint."""
@@ -192,11 +538,18 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  openclaw-align init              Initialize memory files
-  openclaw-align init --force      Force re-initialization
-  openclaw-align init ~/projects   Initialize under a target directory
-  openclaw-align status            Show current status
-  openclaw-align version           Show version
+  openclaw-align init                  Initialize memory files
+  openclaw-align init --force          Force re-initialization
+  openclaw-align init ~/projects       Initialize under a target directory
+  openclaw-align status                Show current status
+  openclaw-align version               Show version
+  openclaw-align gene list             List all genes
+  openclaw-align gene show <id>        Show gene details
+  openclaw-align capsule list          List all capsules
+  openclaw-align events                Show recent evolution events
+  openclaw-align export-md             Export GEP to Markdown format
+  openclaw-align confidence-history    Show confidence history
+  openclaw-align execute-demo          Demo intelligent confirmation workflow
         """
     )
 
@@ -247,6 +600,72 @@ Examples:
         help="Number of commits to analyze"
     )
 
+    # gene command
+    gene_parser = subparsers.add_parser(
+        "gene",
+        help="Gene management commands"
+    )
+    gene_subparsers = gene_parser.add_subparsers(dest="gene_command", help="Gene actions")
+
+    gene_list_parser = gene_subparsers.add_parser("list", help="List all genes")
+    gene_show_parser = gene_subparsers.add_parser("show", help="Show gene details")
+    gene_show_parser.add_argument("gene_id", help="Gene ID")
+
+    # capsule command
+    capsule_parser = subparsers.add_parser(
+        "capsule",
+        help="Capsule management commands"
+    )
+    capsule_subparsers = capsule_parser.add_subparsers(dest="capsule_command", help="Capsule actions")
+
+    capsule_list_parser = capsule_subparsers.add_parser("list", help="List all capsules")
+    capsule_show_parser = capsule_subparsers.add_parser("show", help="Show capsule details")
+    capsule_show_parser.add_argument("capsule_id", help="Capsule ID")
+
+    # events command
+    events_parser = subparsers.add_parser(
+        "events",
+        help="Show evolution events"
+    )
+    events_parser.add_argument(
+        "--limit",
+        type=int,
+        default=20,
+        help="Number of events to show (default: 20)"
+    )
+
+    # export-md command
+    subparsers.add_parser(
+        "export-md",
+        help="Export GEP assets to Markdown format"
+    )
+
+    # confidence-history command
+    conf_history_parser = subparsers.add_parser(
+        "confidence-history",
+        help="Show confidence history for learned preferences"
+    )
+    conf_history_parser.add_argument(
+        "--task-type",
+        help="Filter by task type (e.g., T1, T2, T3, T4)"
+    )
+
+    # execute-demo command
+    execute_parser = subparsers.add_parser(
+        "execute-demo",
+        help="Demonstrate intelligent confirmation workflow"
+    )
+    execute_parser.add_argument(
+        "--task-type",
+        default="T2",
+        help="Task type (default: T2)"
+    )
+    execute_parser.add_argument(
+        "--description",
+        default="运行测试",
+        help="Task description (default: '运行测试')"
+    )
+
     args = parser.parse_args()
     cli = OpenClawAlignmentCLI()
 
@@ -271,6 +690,34 @@ Examples:
         from .integration import IntentAlignmentEngine
         engine = IntentAlignmentEngine(args.repo)
         engine.run_analysis(args.commits)
+
+    elif args.command == "gene":
+        if args.gene_command == "list":
+            cli.gene_list()
+        elif args.gene_command == "show":
+            cli.gene_show(args.gene_id)
+        else:
+            gene_parser.print_help()
+
+    elif args.command == "capsule":
+        if args.capsule_command == "list":
+            cli.capsule_list()
+        elif args.capsule_command == "show":
+            cli.capsule_show(args.capsule_id)
+        else:
+            capsule_parser.print_help()
+
+    elif args.command == "events":
+        cli.events_show(args.limit)
+
+    elif args.command == "export-md":
+        cli.export_md()
+
+    elif args.command == "confidence-history":
+        cli.confidence_history(args.task_type)
+
+    elif args.command == "execute-demo":
+        cli.execute_demo(args.task_type, args.description)
 
     else:
         # Default behavior: print help

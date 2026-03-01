@@ -209,6 +209,12 @@ class RLLearner:
         # contract：Reward system prioritizes reading learner history
         self.env.reward_calculator.set_history_provider(self)
 
+        # Initialize GEP Store（如果可用）
+        from .gep_store import GEPStore
+        memory_dir = Path(self.config_path).parent
+        gep_dir = memory_dir / "gep"
+        self.gep_store = GEPStore(gep_dir) if gep_dir.exists() else None
+
     def _load_model(self) -> None:
         """Load existing model"""
         model_dir = Path(self.model_path).expanduser()
@@ -264,6 +270,10 @@ class RLLearner:
         if self.agent.episode_count % 10 == 0:
             self.save_model()
 
+        # 7. 自动创建/更新 GEP Gene（如果可用）
+        if self.gep_store:
+            self._update_gep_genes(task_context, task_result, reward, action)
+
         return {
             "reward": reward,
             "action_taken": str(action),
@@ -274,6 +284,8 @@ class RLLearner:
     def get_recommended_action(self, task_context: Dict[str, Any]) -> Dict[str, Any]:
         """
         Get recommended actions（Do not update policy）
+
+        集成智能确认决策：基于 GEP confidence 和任务风险，动态决定是否需要确认。
 
         Args:
             task_context: task context
@@ -287,11 +299,18 @@ class RLLearner:
         # Select action（Not exploring）
         action = self.agent.select_action(state, explore=False)
 
+        # 智能确认决策
+        from .confirmation import IntelligentConfirmation
+        confirmation_engine = IntelligentConfirmation(self.gep_store)
+
+        should_confirm, reason = confirmation_engine.should_confirm(task_context)
+
         return {
             "agent": action.agent_selection.value,
             "automation_level": action.automation_level.value,
             "communication_style": action.communication_style.value,
-            "confirmation_needed": action.confirmation_needed,
+            "confirmation_needed": should_confirm,  # 基于智能决策
+            "confirmation_reason": reason,  # 决策原因
             "confidence": 0.7 + self.env.recent_performance * 0.3  # Performance-based confidence
         }
 
@@ -329,6 +348,62 @@ class RLLearner:
         if not rewards:
             return None
         return float(sum(rewards) / len(rewards))
+
+    def _update_gep_genes(self, task_context: Dict[str, Any],
+                         task_result: Dict[str, Any],
+                         reward: float, action) -> None:
+        """
+        自动创建/更新 GEP Gene（内部方法）
+
+        在每次任务完成后自动调用，根据任务结果更新相关 Gene。
+
+        Args:
+            task_context: 任务上下文
+            task_result: 任务结果
+            reward: RL reward
+            action: 执行的动作
+        """
+        if not self.gep_store:
+            return
+
+        from .gep import Gene, Event
+        from datetime import datetime
+
+        # 1. 创建或更新 Agent 选择偏好 Gene
+        agent_gene_id = f"gene_agent_selection_{action.agent_selection.value}"
+        genes = self.gep_store.load_genes()
+
+        if agent_gene_id in genes:
+            # 更新现有 Gene
+            gene = genes[agent_gene_id]
+            gene.increment_confidence(reward)
+        else:
+            # 创建新 Gene
+            gene = Gene(
+                id=agent_gene_id,
+                summary=f"Agent 选择偏好: {action.agent_selection.value}",
+                category="optimize",
+                strategy=f"使用 {action.agent_selection.value} 处理任务",
+                trigger=["task_start", "agent_selection"],
+                confidence=min(1.0, max(0.0, reward)),
+                success_streak=1 if reward > 0.7 else 0
+            )
+            gene.calculate_asset_id()
+
+        genes[agent_gene_id] = gene
+        self.gep_store.save_genes(genes)
+
+        # 2. 记录 Event
+        event = Event(
+            timestamp=datetime.now().isoformat(),
+            event_type="gene_updated" if agent_gene_id in genes else "gene_created",
+            asset_id=gene.asset_id,
+            trigger_signals=[task_context.get("task_type", "unknown")],
+            rl_reward=float(reward),
+            changes=f"任务完成，reward={reward:.2f}",
+            source_node_id="rl_learner"
+        )
+        self.gep_store.append_event(event)
 
 
 def main():

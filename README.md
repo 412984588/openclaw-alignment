@@ -283,9 +283,11 @@ flowchart TB
 
 ## Test Coverage
 
-- **Total Tests**: 87
-- **Pass Rate**: 100%
+- **Total Tests**: 125
+- **Pass Rate**: 99.2% (124/125)
 - **Core RL + integration**: 54 tests ✅
+- **GEP System**: 25 tests ✅
+- **Intelligent Confirmation**: 13 tests ✅
 - **Phase 2**: 1 test ✅
 - **Phase 3**: 21 tests ✅
 - **Docs/contract drift guards**: 11 tests ✅

@@ -24,6 +24,18 @@ from .paths import (
     resolve_model_dir,
 )
 
+# GEP module（Gene Evolution Protocol）
+from .gep import Gene, Capsule, Event
+from .gep_store import GEPStore
+from .md_to_gep import MarkdownToGEPConverter
+from .gep_to_md import GEPToMarkdownExporter
+
+# Intelligent Confirmation module
+from .confirmation import IntelligentConfirmation, RiskLevel
+
+# API module
+from .api import ConfirmationAPI, create_api
+
 # CLI module
 from .cli import OpenClawAlignmentCLI
 
@@ -123,6 +135,19 @@ __all__ = [
     "get_state_dir",
     "resolve_config_path",
     "resolve_model_dir",
+    # GEP
+    "Gene",
+    "Capsule",
+    "Event",
+    "GEPStore",
+    "MarkdownToGEPConverter",
+    "GEPToMarkdownExporter",
+    # Intelligent Confirmation
+    "IntelligentConfirmation",
+    "RiskLevel",
+    # API
+    "ConfirmationAPI",
+    "create_api",
     # Phase 2
     "MLPModel",
     "PolicyNetworkPyTorch",
