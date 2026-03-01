@@ -24,7 +24,7 @@ from .environment import State, Action, AgentType, AutomationLevel, Communicatio
 class Trajectory:
     """轨迹数据类"""
     states: List[np.ndarray]  # 状态序列
-    actions: List[np.ndarray]  # 动作序列
+    actions: List[np.ndarray]  # 动作序列（索引向量）
     rewards: List[float]  # 奖励序列
     dones: List[bool]  # 完成标志
     next_states: List[np.ndarray]  # 下一状态序列
@@ -102,7 +102,7 @@ class PolicyNetwork:
             explore: 是否探索（epsilon-greedy）
 
         Returns:
-            (action_index, action_probs)
+            (action_indices, action_probs)
         """
         action_probs = self.get_action_probs(state)
 
@@ -115,19 +115,24 @@ class PolicyNetwork:
                 np.random.randint(self.head_dims["confirm"])
             ], dtype=int)
         else:
-            # 按概率采样
-            action_idx = np.random.choice(self.action_dim, p=action_probs)
+            # 按概率采样（每个头独立采样）
+            action_indices = np.array([
+                np.random.choice(self.head_dims["agent"], p=action_probs["agent"]),
+                np.random.choice(self.head_dims["automation"], p=action_probs["automation"]),
+                np.random.choice(self.head_dims["style"], p=action_probs["style"]),
+                np.random.choice(self.head_dims["confirm"], p=action_probs["confirm"])
+            ], dtype=int)
 
-        return action_idx, action_probs
+        return action_indices, action_probs
 
-    def update(self, state: np.ndarray, action_idx: int, advantage: float,
+    def update(self, state: np.ndarray, action_indices: np.ndarray, advantage: float,
                learning_rate: float = 0.01) -> float:
         """
         更新策略网络（REINFORCE算法）
 
         Args:
             state: 当前状态
-            action_idx: 执行的动作
+            action_indices: 执行的动作索引（多头）
             advantage: 优势函数 A(s,a) = Q(s,a) - V(s)
             learning_rate: 学习率
 
