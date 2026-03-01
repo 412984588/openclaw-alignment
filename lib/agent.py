@@ -143,18 +143,27 @@ class PolicyNetwork:
         action_probs = self.get_action_probs(state)
         log_prob = np.log(action_probs[action_idx] + 1e-10)
 
-        # Policy gradient: -log π(a|s) * A
-        loss = -log_prob * advantage
+        total_loss = 0.0
+        head_order = ["agent", "automation", "style", "confirm"]
 
-        # 计算梯度
-        grad_log_prob = -np.eye(self.action_dim)[action_idx] / (action_probs + 1e-10)
+        for head_idx, head_name in enumerate(head_order):
+            probs = action_probs[head_name]
+            action_idx = int(action_indices[head_idx])
+            log_prob = np.log(probs[action_idx] + 1e-10)
 
-        # 更新权重
-        grad_w = np.outer(state, grad_log_prob[action_idx] * advantage)
-        self.weights -= learning_rate * grad_w
-        self.bias -= learning_rate * grad_log_prob[action_idx] * advantage
+            # Policy gradient: -log π(a|s) * A
+            loss = -log_prob * advantage
+            total_loss += loss
 
-        return loss
+            one_hot = np.zeros_like(probs)
+            one_hot[action_idx] = 1.0
+            grad_logits = (one_hot - probs) * advantage
+
+            # 梯度上升（等价于对损失下降）
+            self.weights[head_name] += learning_rate * np.outer(state, grad_logits)
+            self.bias[head_name] += learning_rate * grad_logits
+
+        return float(total_loss)
 
     def save(self, path: str) -> None:
         """保存模型参数"""
