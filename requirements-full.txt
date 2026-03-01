@@ -1,0 +1,7 @@
+-r requirements.txt
+redis>=5.0
+celery>=5.3
+torch>=2.2
+tensorboard>=2.15
+numba>=0.59
+scipy>=1.11

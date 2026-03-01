@@ -1,0 +1,25 @@
+{
+  "version": "1.0.0",
+  "last_updated": "2026-02-28T18:00:00Z",
+  "preferences": {
+    "automation_level": "balanced",
+    "communication_style": "direct",
+    "feedback_integration": true
+  },
+  "patterns": {
+    "t1_auto_confirm": true,
+    "t2_auto_confirm": true,
+    "t3_require_plan": true,
+    "t4_use_worktree": true
+  },
+  "tech_stack": {
+    "frontend_primary": "react",
+    "backend_primary": "fastapi",
+    "database_primary": "postgresql"
+  },
+  "learning": {
+    "implicit_enabled": true,
+    "explicit_confirmations": 0,
+    "total_interactions": 0
+  }
+}
