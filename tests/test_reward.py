@@ -167,6 +167,35 @@ class TestRewardCalculator:
         # 自动化权重的平均变化应该小于反馈/质量权重
         assert agent_auto_change < feedback_quality_change
 
+    def test_weight_normalization(self):
+        """测试权重归一化"""
+        calc = RewardCalculator(learning_phase="early")
+        total_weight = sum(signal.weight for signal in calc.signals.values())
+        assert total_weight == pytest.approx(1.0, rel=1e-3)
+
+    def test_negative_signals_reduce_reward(self):
+        """测试负向信号对奖励的影响"""
+        calc = RewardCalculator()
+
+        base_context = {
+            "task_result": {"duration": 100, "errors": 0},
+            "test_result": {"coverage": 90.0, "failed": 0},
+            "user_feedback": {"accepted": True, "rating": 5},
+            "metrics": {"complexity": 2, "duplication": 0.0, "lint_score": 1.0}
+        }
+
+        high_bug_context = {
+            "task_result": {"duration": 1000, "errors": 5},
+            "test_result": {"coverage": 90.0, "failed": 5},
+            "user_feedback": {"accepted": True, "rating": 5},
+            "metrics": {"complexity": 2, "duplication": 0.0, "lint_score": 1.0}
+        }
+
+        reward_base = calc.calculate_reward(base_context)
+        reward_high_bug = calc.calculate_reward(high_bug_context)
+
+        assert reward_high_bug < reward_base
+
     def test_learning_phase_transition(self):
         """测试学习阶段转换"""
         calc = RewardCalculator(learning_phase="early")
