@@ -46,7 +46,7 @@ class MLPModel(nn.Module):
 
 
 class PolicyNetworkPyTorch:
-    """PyTorch策略网络"""
+    """PyTorch策略网络（多头）"""
 
     def __init__(self, state_dim: int, action_dim: int, hidden_dims: List[int] = None):
         """
@@ -54,7 +54,7 @@ class PolicyNetworkPyTorch:
 
         Args:
             state_dim: 状态维度
-            action_dim: 动作维度
+            action_dim: 动作维度（应为11）
             hidden_dims: 隐藏层维度列表
         """
         if not TORCH_AVAILABLE:
@@ -64,19 +64,46 @@ class PolicyNetworkPyTorch:
         self.action_dim = action_dim
         self.hidden_dims = hidden_dims or [128, 128]
 
-        # 创建MLP模型
-        self.model = MLPModel(state_dim, self.hidden_dims, action_dim)
+        self.head_dims = {
+            "agent": 3,
+            "automation": 3,
+            "style": 3,
+            "confirm": 2
+        }
+
+        # 共享骨干网络
+        layers = []
+        prev_dim = state_dim
+        for hidden_dim in self.hidden_dims:
+            layers.append(nn.Linear(prev_dim, hidden_dim))
+            layers.append(nn.ReLU())
+            prev_dim = hidden_dim
+        self.backbone = nn.Sequential(*layers)
+
+        # 多头输出层
+        self.heads = nn.ModuleDict({
+            name: nn.Linear(prev_dim, dim)
+            for name, dim in self.head_dims.items()
+        })
 
         # 优化器
-        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=0.001)
+        self.optimizer = torch.optim.Adam(
+            list(self.backbone.parameters()) + list(self.heads.parameters()),
+            lr=0.001
+        )
 
-    def get_action_probs(self, state: np.ndarray) -> np.ndarray:
-        """获取动作概率分布"""
+    def _forward_logits(self, state_tensor: torch.Tensor) -> Dict[str, torch.Tensor]:
+        """前向传播，获取各头logits"""
+        features = self.backbone(state_tensor)
+        return {name: head(features) for name, head in self.heads.items()}
+
+    def get_action_probs(self, state: np.ndarray) -> Dict[str, np.ndarray]:
+        """获取动作概率分布（多头）"""
         with torch.no_grad():
             state_tensor = torch.FloatTensor(state)
-            logits = self.model(state_tensor)
-            probs = F.softmax(logits, dim=-1)
-            return probs.numpy()
+            logits = self._forward_logits(state_tensor)
+            probs = {name: F.softmax(head_logits, dim=-1).numpy() for name, head_logits in logits.items()}
+            return probs
 
     def sample_action(self, state: np.ndarray, explore: bool = True) -> Tuple[int, np.ndarray]:
         """采样动作"""
