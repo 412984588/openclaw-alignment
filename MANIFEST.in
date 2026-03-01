@@ -1,0 +1,22 @@
+include README.md
+include README_EN.md
+include LICENSE
+include CHANGELOG.md
+include CONTRIBUTING.md
+include CONTRIBUTING.zh-CN.md
+include SECURITY.md
+include SECURITY.zh-CN.md
+include SUPPORT.md
+include SUPPORT.zh-CN.md
+include CODE_OF_CONDUCT.md
+include CODE_OF_CONDUCT.zh-CN.md
+include RELEASING.md
+include RELEASING.zh-CN.md
+include requirements.txt
+include requirements-full.txt
+include requirements-dev.txt
+recursive-include config *.json
+recursive-include skills *.md
+recursive-include audit *.md
+recursive-include docs *.md
+recursive-include scripts *.py *.sh *.ps1

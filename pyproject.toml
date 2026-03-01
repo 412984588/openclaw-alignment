@@ -1,0 +1,75 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "openclaw-alignment"
+version = "1.0.0"
+description = "Reinforcement-learning driven alignment engine for OpenClaw workflows"
+readme = "README_EN.md"
+license = "MIT"
+authors = [
+  { name = "OpenClaw Alignment Contributors" }
+]
+requires-python = ">=3.10"
+dependencies = [
+  "numpy>=1.24"
+]
+keywords = ["reinforcement-learning", "alignment", "openclaw", "actor-critic"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Developers",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Operating System :: Microsoft :: Windows",
+  "Operating System :: MacOS",
+  "Operating System :: POSIX :: Linux",
+]
+
+[project.urls]
+Homepage = "https://github.com/412984588/openclaw-alignment"
+Repository = "https://github.com/412984588/openclaw-alignment"
+Issues = "https://github.com/412984588/openclaw-alignment/issues"
+
+[project.optional-dependencies]
+phase3 = [
+  "redis>=5.0",
+  "celery>=5.3",
+  "torch>=2.2",
+  "tensorboard>=2.15",
+  "numba>=0.59",
+  "scipy>=1.11",
+]
+dev = [
+  "pytest>=8.0",
+  "pytest-cov>=5.0",
+  "build>=1.2",
+  "twine>=5.0",
+  "pip-audit>=2.7",
+  "ruff>=0.6",
+  "mypy>=1.10",
+]
+
+[project.scripts]
+openclaw-alignment = "lib.integration:main"
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["lib*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.mypy]
+python_version = "3.10"
+ignore_missing_imports = true

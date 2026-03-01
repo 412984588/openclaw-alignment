@@ -51,7 +51,9 @@ class DistributedTrainingConfig:
                  redis_port: int = 6379,
                  redis_db: int = 0,
                  broker_url: str = None,
-                 result_backend: str = None):
+                 result_backend: str = None,
+                 require_worker: bool = True,
+                 connection_timeout: float = 1.0):
         """
         初始化配置
 
@@ -61,10 +63,14 @@ class DistributedTrainingConfig:
             redis_db: Redis数据库
             broker_url: Celery broker URL
             result_backend: Celery结果后端URL
+            require_worker: 是否要求至少一个Celery worker在线
+            connection_timeout: 连接探测超时时间（秒）
         """
         self.redis_host = redis_host
         self.redis_port = redis_port
         self.redis_db = redis_db
+        self.require_worker = require_worker
+        self.connection_timeout = connection_timeout
 
         # 默认使用Redis作为broker和backend
         self.broker_url = broker_url or f"redis://{redis_host}:{redis_port}/{redis_db}"
@@ -105,15 +111,54 @@ class DistributedTrainer:
             self.config.celery_available
         )
 
+        if self.distributed_enabled and not self._distributed_runtime_ready():
+            logger.warning("⚠️ 未检测到可用的分布式运行时，降级到单机模式")
+            self.distributed_enabled = False
+
         if self.distributed_enabled:
             logger.info("✅ 分布式训练已启用（Redis + Celery）")
             self._initialize_distributed()
         else:
-            logger.warning("⚠️ 分布式依赖不可用，降级到单机模式")
+            logger.warning("⚠️ 分布式模式不可用，降级到单机模式")
             self._initialize_fallback()
 
         # 训练任务记录
         self.training_tasks: Dict[str, Dict[str, Any]] = {}
+
+    def _distributed_runtime_ready(self) -> bool:
+        """检查分布式运行时是否可用（Redis连通 + 可选worker在线）"""
+        try:
+            redis_client = redis.Redis(
+                host=self.config.redis_host,
+                port=self.config.redis_port,
+                db=self.config.redis_db,
+                decode_responses=True,
+                socket_connect_timeout=self.config.connection_timeout,
+                socket_timeout=self.config.connection_timeout,
+            )
+            redis_client.ping()
+        except Exception as exc:
+            logger.warning(f"⚠️ Redis连接不可用: {exc}")
+            return False
+
+        if not self.config.require_worker:
+            return True
+
+        try:
+            probe_app = Celery(
+                'openclaw_alignment_probe',
+                broker=self.config.broker_url,
+                backend=self.config.result_backend
+            )
+            replies = probe_app.control.ping(timeout=self.config.connection_timeout)
+            if not replies:
+                logger.warning("⚠️ 未检测到在线Celery worker")
+                return False
+        except Exception as exc:
+            logger.warning(f"⚠️ Celery worker探测失败: {exc}")
+            return False
+
+        return True
 
     def _initialize_distributed(self):
         """初始化分布式组件"""
@@ -122,7 +167,9 @@ class DistributedTrainer:
             host=self.config.redis_host,
             port=self.config.redis_port,
             db=self.config.redis_db,
-            decode_responses=True
+            decode_responses=True,
+            socket_connect_timeout=self.config.connection_timeout,
+            socket_timeout=self.config.connection_timeout,
         )
 
         # 初始化Celery应用
@@ -172,28 +219,32 @@ class DistributedTrainer:
 
         # 并行训练
         task_ids = []
-        for config in project_configs:
-            project_id = config.get("project_id", f"project_{len(task_ids)}")
+        try:
+            for config in project_configs:
+                project_id = config.get("project_id", f"project_{len(task_ids)}")
 
-            # 提交异步任务
-            result = self.celery_app.send_task(
-                'train_episode',
-                args=[config, num_episodes_per_project, save_interval],
-                kwargs={}
-            )
+                # 提交异步任务
+                result = self.celery_app.send_task(
+                    'train_episode',
+                    args=[config, num_episodes_per_project, save_interval],
+                    kwargs={}
+                )
 
-            task_ids.append({
-                "project_id": project_id,
-                "task_id": result.id
-            })
+                task_ids.append({
+                    "project_id": project_id,
+                    "task_id": result.id
+                })
 
-            # 记录任务
-            self.training_tasks[project_id] = {
-                "task_id": result.id,
-                "status": "PENDING",
-                "config": config,
-                "started_at": datetime.now().isoformat()
-            }
+                # 记录任务
+                self.training_tasks[project_id] = {
+                    "task_id": result.id,
+                    "status": "PENDING",
+                    "config": config,
+                    "started_at": datetime.now().isoformat()
+                }
+        except Exception as exc:
+            logger.error(f"❌ 分布式任务提交失败，降级到单机模式: {exc}")
+            return self._train_sequential(project_configs, num_episodes_per_project)
 
         # 等待所有任务完成
         results = self._wait_for_tasks(task_ids)

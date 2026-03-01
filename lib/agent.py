@@ -17,6 +17,14 @@ from dataclasses import dataclass
 import json
 from pathlib import Path
 
+from .contracts import (
+    ACTION_HEAD_DIMS,
+    ACTION_VECTOR_DIM,
+    AGENT_ORDER,
+    AUTOMATION_ORDER,
+    CONFIRM_ORDER,
+    STYLE_ORDER,
+)
 from .environment import State, Action, AgentType, AutomationLevel, CommunicationStyle
 
 
@@ -44,7 +52,7 @@ class PolicyNetwork:
     Phase 2: 可选神经网络（PyTorch）
     """
 
-    def __init__(self, state_dim: int, action_dim: int = 11, hidden_dim: int = 64):
+    def __init__(self, state_dim: int, action_dim: int = ACTION_VECTOR_DIM, hidden_dim: int = 64):
         """
         初始化策略网络
 
@@ -58,12 +66,7 @@ class PolicyNetwork:
         self.hidden_dim = hidden_dim
 
         # 多头动作空间
-        self.head_dims = {
-            "agent": 3,
-            "automation": 3,
-            "style": 3,
-            "confirm": 2
-        }
+        self.head_dims = ACTION_HEAD_DIMS.copy()
 
         # Phase 1: 线性模型参数（多头）
         self.weights = {
@@ -106,7 +109,15 @@ class PolicyNetwork:
         """
         action_probs = self.get_action_probs(state)
 
-        if explore and np.random.random() < 0.1:  # 10% epsilon-greedy
+        if not explore:
+            # 推理模式：贪心选择，避免推荐动作随机抖动
+            action_indices = np.array([
+                int(np.argmax(action_probs["agent"])),
+                int(np.argmax(action_probs["automation"])),
+                int(np.argmax(action_probs["style"])),
+                int(np.argmax(action_probs["confirm"]))
+            ], dtype=int)
+        elif np.random.random() < 0.1:  # 10% epsilon-greedy
             # 随机探索（每个头独立随机）
             action_indices = np.array([
                 np.random.randint(self.head_dims["agent"]),
@@ -351,21 +362,33 @@ class AlignmentAgent:
 
     def encode_action_indices(self, action: Action) -> np.ndarray:
         """将Action编码为索引向量"""
-        agent_idx = [AgentType.CLAUDE, AgentType.CODEX, AgentType.GEMINI].index(action.agent_selection)
-        automation_idx = [AutomationLevel.LOW, AutomationLevel.MEDIUM, AutomationLevel.HIGH].index(action.automation_level)
-        style_idx = [CommunicationStyle.BRIEF, CommunicationStyle.DETAILED, CommunicationStyle.INTERACTIVE].index(action.communication_style)
-        confirm_idx = 1 if action.confirmation_needed else 0
+        agent_idx = AGENT_ORDER.index(action.agent_selection.value)
+        automation_idx = AUTOMATION_ORDER.index(action.automation_level.value)
+        style_idx = STYLE_ORDER.index(action.communication_style.value)
+        confirm_idx = CONFIRM_ORDER.index(action.confirmation_needed)
 
         return np.array([agent_idx, automation_idx, style_idx, confirm_idx], dtype=int)
 
     def decode_action_indices(self, action_indices: np.ndarray) -> Action:
         """将动作索引解码为Action对象"""
-        agent_idx, automation_idx, style_idx, confirm_idx = [int(x) for x in action_indices]
+        indices = [int(x) for x in action_indices]
+        if len(indices) != 4:
+            raise ValueError(f"action_indices must contain 4 values, got {len(indices)}")
+        agent_idx, automation_idx, style_idx, confirm_idx = indices
 
-        agent_type = [AgentType.CLAUDE, AgentType.CODEX, AgentType.GEMINI][agent_idx]
-        automation = [AutomationLevel.LOW, AutomationLevel.MEDIUM, AutomationLevel.HIGH][automation_idx]
-        style = [CommunicationStyle.BRIEF, CommunicationStyle.DETAILED, CommunicationStyle.INTERACTIVE][style_idx]
-        confirm = bool(confirm_idx)
+        if not (0 <= agent_idx < len(AGENT_ORDER)):
+            raise ValueError(f"agent index out of range: {agent_idx}")
+        if not (0 <= automation_idx < len(AUTOMATION_ORDER)):
+            raise ValueError(f"automation index out of range: {automation_idx}")
+        if not (0 <= style_idx < len(STYLE_ORDER)):
+            raise ValueError(f"style index out of range: {style_idx}")
+        if not (0 <= confirm_idx < len(CONFIRM_ORDER)):
+            raise ValueError(f"confirm index out of range: {confirm_idx}")
+
+        agent_type = AgentType(AGENT_ORDER[agent_idx])
+        automation = AutomationLevel(AUTOMATION_ORDER[automation_idx])
+        style = CommunicationStyle(STYLE_ORDER[style_idx])
+        confirm = CONFIRM_ORDER[confirm_idx]
 
         return Action(
             agent_selection=agent_type,
@@ -386,9 +409,6 @@ class AlignmentAgent:
         """
         if len(trajectory) == 0:
             return {}
-
-        # 计算回报
-        returns = self._compute_returns(trajectory.rewards, trajectory.dones)
 
         total_actor_loss = 0.0
         total_critic_loss = 0.0

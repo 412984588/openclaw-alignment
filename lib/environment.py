@@ -21,6 +21,18 @@ from enum import Enum
 import json
 from pathlib import Path
 
+from .contracts import (
+    ACTION_HEAD_DIMS,
+    ACTION_VECTOR_DIM,
+    AGENT_ORDER,
+    AUTOMATION_ORDER,
+    CONFIRM_ORDER,
+    STATE_DIMENSIONS,
+    STATE_VECTOR_DIM,
+    STYLE_ORDER,
+    TECH_STACK_ORDER,
+    USER_MOOD_ORDER,
+)
 from .reward import RewardCalculator
 
 
@@ -153,56 +165,32 @@ class InteractionEnvironment:
     """
 
     # 状态空间定义
-    STATE_DIM = {
-        "task_type": 4,  # T1, T2, T3, T4
-        "tech_stack": 8,  # react, vue, fastapi, express, python, js, ts, go
-        "user_mood": 3,  # focused, relaxed, stressed
-        "time_of_day": 1,  # 归一化时间
-        "recent_performance": 1  # 归一化性能
-    }
-    TOTAL_STATE_DIM = sum(STATE_DIM.values())  # 17维
+    STATE_DIM = STATE_DIMENSIONS.copy()
+    TOTAL_STATE_DIM = STATE_VECTOR_DIM  # 17维
 
     # 动作空间定义
     ACTION_DIM = {
-        "agent_selection": 3,  # claude, codex, gemini
-        "automation_level": 3,  # low, medium, high
-        "communication_style": 3,  # brief, detailed, interactive
-        "confirmation_needed": 2  # bool (False/True)
+        "agent_selection": ACTION_HEAD_DIMS["agent"],
+        "automation_level": ACTION_HEAD_DIMS["automation"],
+        "communication_style": ACTION_HEAD_DIMS["style"],
+        "confirmation_needed": ACTION_HEAD_DIMS["confirm"],
     }
-    TOTAL_ACTION_DIM = sum(ACTION_DIM.values())  # 11维
+    TOTAL_ACTION_DIM = ACTION_VECTOR_DIM  # 11维
 
     # 支持的技术栈
-    SUPPORTED_TECH = {
-        "react": 0, "vue": 1, "fastapi": 2, "express": 3,
-        "python": 4, "javascript": 5, "typescript": 6, "go": 7
-    }
+    SUPPORTED_TECH = {name: idx for idx, name in enumerate(TECH_STACK_ORDER)}
 
     # Agent映射
-    AGENT_MAP = {
-        AgentType.CLAUDE: 0,
-        AgentType.CODEX: 1,
-        AgentType.GEMINI: 2
-    }
+    AGENT_MAP = {AgentType(name): idx for idx, name in enumerate(AGENT_ORDER)}
 
     # 自动化级别映射
-    AUTOMATION_MAP = {
-        AutomationLevel.LOW: 0,
-        AutomationLevel.MEDIUM: 1,
-        AutomationLevel.HIGH: 2
-    }
+    AUTOMATION_MAP = {AutomationLevel(name): idx for idx, name in enumerate(AUTOMATION_ORDER)}
 
     # 沟通风格映射
-    STYLE_MAP = {
-        CommunicationStyle.BRIEF: 0,
-        CommunicationStyle.DETAILED: 1,
-        CommunicationStyle.INTERACTIVE: 2
-    }
+    STYLE_MAP = {CommunicationStyle(name): idx for idx, name in enumerate(STYLE_ORDER)}
 
     # 确认标志映射
-    CONFIRM_MAP = {
-        False: 0,
-        True: 1
-    }
+    CONFIRM_MAP = {value: idx for idx, value in enumerate(CONFIRM_ORDER)}
 
     def __init__(self, config_path: Optional[str] = None):
         """
@@ -247,11 +235,13 @@ class InteractionEnvironment:
         Returns:
             初始状态
         """
-        self.current_task_context = task_context
-
         # 解析任务类型
-        task_type_str = task_context.get("task_type", "T2")
+        task_type_str = str(task_context.get("task_type", "T2")).upper()
+        if task_type_str not in TaskType.__members__:
+            task_type_str = "T2"
         task_type = TaskType[task_type_str]
+        task_context_normalized = dict(task_context)
+        task_context_normalized["task_type"] = task_type_str
 
         # 解析技术栈
         tech_stacks = task_context.get("tech_stack", ["python"])
@@ -263,7 +253,15 @@ class InteractionEnvironment:
 
         # 解析时间（默认为中午）
         time_of_day = task_context.get("time_of_day", 12.0)
+        try:
+            time_of_day = float(time_of_day)
+        except (TypeError, ValueError):
+            time_of_day = 12.0
+        time_of_day = max(0.0, min(24.0, time_of_day))
         time_normalized = time_of_day / 24.0
+        task_context_normalized["time_of_day"] = time_of_day
+
+        self.current_task_context = task_context_normalized
 
         # 创建状态
         self.current_state = State(
@@ -292,6 +290,9 @@ class InteractionEnvironment:
         Returns:
             (next_state, reward, done, info)
         """
+        if self.current_state is None or self.current_task_context is None:
+            raise ValueError("Environment not initialized, call reset() before step().")
+
         # 1. 记录Agent使用
         agent_name = action.agent_selection.value
         self.agent_usage_history[agent_name] += 1
@@ -325,6 +326,9 @@ class InteractionEnvironment:
 
         # 6. 检查episode是否结束
         done = task_result.get("completed", True)
+        if done:
+            self.episode_count += 1
+            self.episode_rewards.append(float(reward))
 
         # 7. 准备info
         info = {
@@ -366,7 +370,7 @@ class InteractionEnvironment:
 
     def _encode_user_mood(self, user_mood: str) -> np.ndarray:
         """将用户心情编码为one-hot向量"""
-        moods = ["focused", "relaxed", "stressed"]
+        moods = list(USER_MOOD_ORDER)
         vector = np.zeros(len(moods))
 
         if user_mood in moods:

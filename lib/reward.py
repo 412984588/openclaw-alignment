@@ -12,7 +12,7 @@
 """
 
 import numpy as np
-from typing import Dict, List, Any, Optional, Callable
+from typing import Dict, List, Any, Optional, Callable, Protocol
 from dataclasses import dataclass, field
 from datetime import datetime
 import json
@@ -52,6 +52,16 @@ class RewardSignal:
         self.weight = max(0.0, min(1.0, self.weight + delta))
 
 
+class PreferenceHistoryProvider(Protocol):
+    """偏好历史提供器接口"""
+
+    def get_agent_success_rate(self, task_type: str, agent: str) -> Optional[float]:
+        """返回task_type下agent的历史成功率（0-1）"""
+
+    def get_workflow_success_rate(self, task_type: str, workflow: str) -> Optional[float]:
+        """返回task_type下workflow的历史成功率（0-1）"""
+
+
 class RewardCalculator:
     """多维度奖励计算引擎
 
@@ -62,7 +72,11 @@ class RewardCalculator:
     4. 行为模式（10%）: agent_preference(5%), workflow_preference(5%)
     """
 
-    def __init__(self, learning_phase: str = "early"):
+    def __init__(
+        self,
+        learning_phase: str = "early",
+        history_provider: Optional[PreferenceHistoryProvider] = None,
+    ):
         """
         初始化奖励计算器
 
@@ -70,6 +84,7 @@ class RewardCalculator:
             learning_phase: 学习阶段 ("early": 前10个任务, "mature": 20+个任务)
         """
         self.learning_phase = learning_phase
+        self.history_provider = history_provider
         self.task_count = 0
 
         # 初始化奖励信号
@@ -197,6 +212,10 @@ class RewardCalculator:
 
         # 根据学习阶段调整权重
         self._adjust_weights_for_phase()
+
+    def set_history_provider(self, provider: Optional[PreferenceHistoryProvider]) -> None:
+        """设置历史偏好提供器"""
+        self.history_provider = provider
 
     def _adjust_weights_for_phase(self) -> None:
         """根据学习阶段调整权重
@@ -464,11 +483,15 @@ class RewardCalculator:
         """收集Agent选择偏好（0-1）"""
         task_result = context.get("task_result", {})
         used_agent = task_result.get("agent", "claude")
-
-        # 从历史中学习偏好
-        # TODO: 需要从learner中获取历史Agent使用情况
-        # 这里简化为：如果使用的Agent与任务类型匹配，则奖励高
         task_type = context.get("task_type", "T2")
+
+        # 优先使用学习器历史
+        if self.history_provider:
+            history_score = self.history_provider.get_agent_success_rate(task_type, used_agent)
+            if history_score is not None:
+                return max(0.0, min(1.0, float(history_score)))
+
+        # 回退到默认规则：任务类型与Agent匹配
 
         # 简单的匹配规则
         preference_match = {
@@ -484,10 +507,15 @@ class RewardCalculator:
         """收集工作流偏好（0-1）"""
         task_result = context.get("task_result", {})
         workflow = task_result.get("workflow", "standard")
+        task_type = context.get("task_type", "T2")
 
-        # 从历史中学习工作流偏好
-        # TODO: 需要从learner中获取历史工作流使用情况
-        # 这里简化为：TDD工作流奖励更高
+        # 优先使用学习器历史
+        if self.history_provider:
+            history_score = self.history_provider.get_workflow_success_rate(task_type, workflow)
+            if history_score is not None:
+                return max(0.0, min(1.0, float(history_score)))
+
+        # 回退到默认规则：TDD工作流奖励更高
         if workflow == "tdd":
             return 0.9
         elif workflow == "test_first":
