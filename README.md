@@ -17,7 +17,7 @@
 
 ```bash
 # 克隆仓库
-git clone https://github.com/yourusername/openclaw-alignment.git
+git clone https://github.com/412984588/openclaw-alignment.git
 cd openclaw-alignment
 
 # 安装Skill
