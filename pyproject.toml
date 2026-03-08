@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "openclaw-alignment"
-version = "1.0.1"
-description = "Reinforcement-learning driven alignment engine for OpenClaw workflows"
+version = "2.0.0"
+description = "Explainable autonomous execution policy engine for OpenClaw workflows"
 readme = "README.md"
 license = "MIT"
 authors = [
@@ -51,20 +51,20 @@ dev = [
   "pip-audit>=2.7",
   "ruff>=0.6",
   "mypy>=1.10",
+  "redis>=5.0",
+  "celery>=5.3",
 ]
 
 [project.scripts]
-# host CLI Order（new）
-openclaw-align = "lib.cli:main"
-# Compatible with old commands
-openclaw-alignment = "lib.integration:main"
+openclaw-align = "openclaw_align.cli:main"
+openclaw-alignment = "openclaw_align.cli:main"
 
 [tool.setuptools]
 include-package-data = true
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["lib*"]
+include = ["lib*", "openclaw_align*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

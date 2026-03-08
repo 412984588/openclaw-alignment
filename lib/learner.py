@@ -1,51 +1,54 @@
 #!/usr/bin/env python3
 """
-Learning modules - Learn user preferences from collected data
+Learning modules for lightweight preference signals and optional RL adaptation.
 
 Supports two learning modes：
-1. PreferenceLearner: statistical learning（Githistorical frequency analysis）
-2. RLLearner: reinforcement learning（Actor-Criticonline learning）
+1. PreferenceLearner: derive weak hints from local history signals
+2. RLLearner: optional reinforcement-learning optimization
 """
 
 import json
 from typing import Any, Dict, List, Optional, Tuple
 from pathlib import Path
 from collections import defaultdict
+from datetime import datetime, timezone
 
 from .agent import AlignmentAgent, Trajectory
 from .environment import InteractionEnvironment
+from .policy_models import Rule
 from .paths import resolve_config_path, resolve_model_dir
 
 
 class PreferenceLearner:
-    """Preference learning algorithm"""
+    """Derive weak preference hints from observed local history."""
 
     def __init__(self, config_path: str | Path | None = None):
         self.config_path = str(resolve_config_path(config_path))
         self.learned_preferences: Dict[str, Any] = {}
 
     def learn_from_git_history(self, git_data: Dict[str, Any]) -> Dict[str, Any]:
-        """fromGitHistory learning preferences"""
-        print("\n🧠 Learning preferences...")
+        """Convert Git-derived signals into weak preference hints."""
+        print("\n🧠 Deriving weak hints from local history...")
 
         # Learn technology stack preferences
         tech_preferences = self._learn_tech_stack(git_data["tech_stack"])
 
-        # Learn workflow preferences
+        # Learn lightweight workflow signals
         workflow_preferences = self._learn_workflow(git_data["workflow"])
 
-        # Combining learning results
+        # Combine observations into a weak-hint profile
         self.learned_preferences = {
             "tech_stack": tech_preferences,
             "workflow": workflow_preferences,
             "metadata": {
                 "last_updated": git_data.get("metadata", {}).get("collected_at", "unknown"),
                 "confidence": git_data.get("metadata", {}).get("confidence", 0.5),
-                "data_source": "git_history"
+                "data_source": "git_history",
+                "strength": "weak_hint",
             }
         }
 
-        print(f"✅ Study completed！Confidence: {self.learned_preferences['metadata']['confidence']*100}%")
+        print(f"✅ Weak hints updated. Confidence: {self.learned_preferences['metadata']['confidence']*100}%")
         return self.learned_preferences
 
     def _learn_tech_stack(self, tech_stack: Dict[str, int]) -> Dict[str, Any]:
@@ -81,14 +84,15 @@ class PreferenceLearner:
         }
 
     def _learn_workflow(self, workflow: Dict[str, Any]) -> Dict[str, Any]:
-        """Learn workflow preferences"""
+        """Extract coarse workflow signals from observed activity."""
         preferences = {
             "test_driven": workflow.get("test_first", False),
             "test_ratio": workflow.get("test_ratio", 0),
-            "automation_level": "balanced"
+            "automation_level": "balanced",
+            "signal_strength": "weak_hint",
         }
 
-        # Infer automation preferences based on test proportions
+        # Infer only a coarse automation signal from test proportions
         if preferences["test_ratio"] > 0.5:
             preferences["automation_level"] = "quality_focused"
         elif preferences["test_ratio"] < 0.2:
@@ -97,7 +101,7 @@ class PreferenceLearner:
         return preferences
 
     def save_preferences(self, output_path: str | Path | None = None) -> None:
-        """Save learning results to configuration file"""
+        """Save derived hint data to the configuration file."""
         output_file = Path(output_path or self.config_path).expanduser()
 
         # Make sure the directory exists
@@ -108,7 +112,7 @@ class PreferenceLearner:
             with open(output_file, 'r') as f:
                 config = json.load(f)
         else:
-            config = {"version": "1.0.1"}
+            config = {"version": "2.0.0"}
 
         # Update configuration
         config.update({
@@ -120,54 +124,121 @@ class PreferenceLearner:
         with open(output_file, 'w') as f:
             json.dump(config, f, indent=2, ensure_ascii=False)
 
-        print(f"✅ Preferences saved to: {output_file}")
+        print(f"✅ Weak hints saved to: {output_file}")
 
     def generate_report(self) -> str:
-        """Generate learning report"""
+        """Generate a report of weak hints derived from observed history."""
         if not self.learned_preferences:
-            return "❌ No preferences have been learned yet"
+            return "❌ No history hints have been derived yet"
 
         tech = self.learned_preferences.get("tech_stack", {})
         workflow = self.learned_preferences.get("workflow", {})
         metadata = self.learned_preferences.get("metadata", {})
 
         report = f"""
-# Intent Alignment Learning Report
+# Intent Alignment Hint Report
 
-## 📊 Technology stack preferences
+## 📊 Observed technology patterns
 
-Main technology: **{tech.get('primary', 'unknown')}** (Proportion{tech.get('stats', {}).get(tech.get('primary', ''), {}).get('percentage', 0)}%)
-minor technology: {tech.get('secondary', 'none')}
-third choice: {tech.get('tertiary', 'none')}
+Observed primary stack: **{tech.get('primary', 'unknown')}** ({tech.get('stats', {}).get(tech.get('primary', ''), {}).get('percentage', 0)}%)
+Secondary signal: {tech.get('secondary', 'none')}
+Third signal: {tech.get('tertiary', 'none')}
 
-Detailed statistics:
+Observed sample breakdown:
 """
 
         for tech_name, stats in tech.get("stats", {}).items():
-            report += f"- {tech_name}: {stats['count']}Second-rate ({stats['percentage']}%)\n"
+            report += f"- {tech_name}: observed {stats['count']} times ({stats['percentage']}%)\n"
 
         report += f"""
-## 🔄 Workflow preferences
+## 🔄 Weak workflow hints
 
-test driven: {'✅ yes' if workflow.get('test_driven') else '❌ no'}
-Automation preferences: {workflow.get('automation_level', 'balanced')}
-Test proportion: {workflow.get('test_ratio', 0)*100:.0f}%
+Observed test-first tendency: {'✅ yes' if workflow.get('test_driven') else '❌ no'}
+Weak hint profile: {workflow.get('automation_level', 'balanced')}
+Observed test proportion: {workflow.get('test_ratio', 0)*100:.0f}%
 
 ## 📈 metadata
 
 Confidence: {metadata.get('confidence', 0)*100:.0f}%
 Data source: {metadata.get('data_source', 'unknown')}
+Hint strength: {metadata.get('strength', 'weak_hint')}
 Update time: {metadata.get('last_updated', 'unknown')}
 
 ---
 
-💡 **suggestion**:
-- Mainly used {tech.get('primary', 'unknown')} develop
-- {'Use test-driven development' if workflow.get('test_driven') else 'Consider increasing test coverage'}
-- keep current{'quality first' if workflow.get('automation_level') == 'quality_focused' else 'Speed ​​priority'}style
+💡 **Interpretation**:
+- Treat these observations as weak hints, not durable workflow policy
+- Observed primary stack: {tech.get('primary', 'unknown')}
+- {'Observed test-first behavior in history' if workflow.get('test_driven') else 'History does not strongly indicate test-first behavior'}
+- Current hint suggests {'quality-focused verification habits' if workflow.get('automation_level') == 'quality_focused' else 'balanced or speed-oriented execution habits'}
 """
 
         return report
+
+    def build_hint_rules(self, scope_key: str) -> List[Rule]:
+        """Convert learned Git-derived preferences into weak hint rules only."""
+        if not self.learned_preferences:
+            return []
+
+        workflow = self.learned_preferences.get("workflow", {})
+        metadata = self.learned_preferences.get("metadata", {})
+        timestamp = datetime.now(timezone.utc).isoformat()
+
+        workflow_hint = Rule(
+            id=f"hint_git_history_workflow_{abs(hash(scope_key)) % 10_000}",
+            summary="Git history weakly hints that verification tasks may be automation-friendly",
+            category="optimize",
+            trigger=["task_type:T1", "keyword:test", "keyword:lint", "keyword:build"],
+            strategy="Treat verification-heavy tasks as weak automation hints only.",
+            confidence=min(0.5, float(metadata.get("confidence", 0.3))),
+            status="hint",
+            scope="project" if scope_key else "global",
+            scope_key=scope_key,
+            evidence_count=1,
+            source_type="git_history",
+            last_seen_at=timestamp,
+            policy_decision="auto_execute" if workflow.get("test_ratio", 0) >= 0.3 else "",
+        )
+        workflow_hint.calculate_asset_id()
+        return [workflow_hint]
+
+    def collect_runtime_policy_signals(self, policy_store: Any) -> Dict[str, Any]:
+        """Summarize strong runtime signals from decision history without mutating policy state."""
+        outcome_events = [
+            event
+            for event in policy_store.get_decision_events(limit=2_000)
+            if event.event_type == "decision_outcome"
+        ]
+
+        strong_signals = {
+            "explicit_user_corrections": 0,
+            "accepted_auto_executes": 0,
+            "rollback_failures": 0,
+            "repeated_failures": 0,
+            "override_against_rule": 0,
+        }
+
+        for event in outcome_events:
+            override = event.payload.get("user_override", "")
+            result = event.payload.get("execution_result", "")
+            final_decision = event.payload.get("final_decision", "")
+
+            if override in {"confirmed_after_prompt", "prefer_auto_execute", "prefer_confirmation"}:
+                strong_signals["explicit_user_corrections"] += 1
+            if result == "success" and final_decision == "auto_execute":
+                strong_signals["accepted_auto_executes"] += 1
+            if result == "rollback":
+                strong_signals["rollback_failures"] += 1
+            if result == "failure":
+                strong_signals["repeated_failures"] += 1
+            if override in {"blocked_auto_execute", "prefer_confirmation"}:
+                strong_signals["override_against_rule"] += 1
+
+        return {
+            "strong_signals": strong_signals,
+            "sample_size": len(outcome_events),
+            "source": "policy_events",
+        }
 
 
 class RLLearner:
@@ -209,11 +280,10 @@ class RLLearner:
         # contract：Reward system prioritizes reading learner history
         self.env.reward_calculator.set_history_provider(self)
 
-        # Initialize GEP store if available
-        from .gep_store import GEPStore
+        # Initialize local policy store if available
+        from .policy_store import PolicyStore
         memory_dir = Path(self.config_path).parent
-        gep_dir = memory_dir / "gep"
-        self.gep_store = GEPStore(gep_dir) if gep_dir.exists() else None
+        self.policy_store = PolicyStore.bootstrap(memory_dir, ensure_files=True)
 
     def _load_model(self) -> None:
         """Load existing model"""
@@ -270,9 +340,9 @@ class RLLearner:
         if self.agent.episode_count % 10 == 0:
             self.save_model()
 
-        # 7. Auto-create or update GEP genes (if available)
-        if self.gep_store:
-            self._update_gep_genes(task_context, task_result, reward, action)
+        # 7. Auto-create or update policy rules (if available)
+        if self.policy_store:
+            self._update_policy_rules(task_context, task_result, reward, action)
 
         return {
             "reward": reward,
@@ -285,7 +355,7 @@ class RLLearner:
         """
         Get recommended actions（Do not update policy）
 
-        Integrate intelligent confirmation decisions based on GEP confidence and risk.
+        Integrate intelligent confirmation decisions based on policy confidence and risk.
 
         Args:
             task_context: task context
@@ -301,7 +371,7 @@ class RLLearner:
 
         # Intelligent confirmation decision
         from .confirmation import IntelligentConfirmation
-        confirmation_engine = IntelligentConfirmation(self.gep_store)
+        confirmation_engine = IntelligentConfirmation(self.policy_store)
 
         should_confirm, reason = confirmation_engine.should_confirm(task_context)
 
@@ -349,13 +419,17 @@ class RLLearner:
             return None
         return float(sum(rewards) / len(rewards))
 
-    def _update_gep_genes(self, task_context: Dict[str, Any],
-                         task_result: Dict[str, Any],
-                         reward: float, action) -> None:
+    def _update_policy_rules(
+        self,
+        task_context: Dict[str, Any],
+        task_result: Dict[str, Any],
+        reward: float,
+        action,
+    ) -> None:
         """
-        Auto-create or update GEP genes (internal helper).
+        Auto-create or update policy rules (internal helper).
 
-        Called after each task to update relevant genes using task outcome.
+        Called after each task to update relevant rules using task outcome.
 
         Args:
             task_context: Task context
@@ -363,48 +437,59 @@ class RLLearner:
             reward: RL reward
             action: Chosen action
         """
-        if not self.gep_store:
+        if not self.policy_store:
             return
 
-        from .gep import Gene, Event
+        from .policy_models import PolicyEvent, Rule
         from datetime import datetime
 
-        # 1. Create or update the agent selection preference gene
-        agent_gene_id = f"gene_agent_selection_{action.agent_selection.value}"
-        genes = self.gep_store.load_genes()
-        gene_exists = agent_gene_id in genes
+        # 1. Create or update the agent selection preference rule
+        agent_rule_id = f"rule_agent_selection_{action.agent_selection.value}"
+        rules = self.policy_store.load_rules()
+        rule_exists = agent_rule_id in rules
 
-        if gene_exists:
-            # Update existing gene
-            gene = genes[agent_gene_id]
-            gene.increment_confidence(reward)
+        if rule_exists:
+            # Update existing rule
+            rule = rules[agent_rule_id]
+            rule.increment_confidence(reward)
+            rule.status = "hint"
+            rule.source_type = "rl_feedback"
+            rule.policy_decision = ""
+            rule.last_seen_at = datetime.now(timezone.utc).isoformat()
         else:
-            # Create a new gene
-            gene = Gene(
-                id=agent_gene_id,
+            # Create a new rule
+            rule = Rule(
+                id=agent_rule_id,
                 summary=f"Agent selection preference: {action.agent_selection.value}",
                 category="optimize",
                 strategy=f"Use {action.agent_selection.value} to process matching tasks",
                 trigger=["task_start", "agent_selection"],
                 confidence=min(1.0, max(0.0, reward)),
-                success_streak=1 if reward > 0.7 else 0
+                success_streak=1 if reward > 0.7 else 0,
+                status="hint",
+                scope="project",
+                scope_key=str(Path(self.config_path).expanduser().parent),
+                evidence_count=1,
+                source_type="rl_feedback",
+                last_seen_at=datetime.now(timezone.utc).isoformat(),
+                policy_decision="",
             )
-            gene.calculate_asset_id()
+            rule.calculate_asset_id()
 
-        genes[agent_gene_id] = gene
-        self.gep_store.save_genes(genes)
+        rules[agent_rule_id] = rule
+        self.policy_store.save_rules(rules)
 
         # 2. Record event
-        event = Event(
+        event = PolicyEvent(
             timestamp=datetime.now().isoformat(),
-            event_type="gene_updated" if gene_exists else "gene_created",
-            asset_id=gene.asset_id,
+            event_type="rule_updated" if rule_exists else "rule_created",
+            asset_id=rule.asset_id,
             trigger_signals=[task_context.get("task_type", "unknown")],
             rl_reward=float(reward),
             changes=f"Task completed, reward={reward:.2f}",
             source_node_id="rl_learner"
         )
-        self.gep_store.append_event(event)
+        self.policy_store.append_event(event)
 
 
 def main():

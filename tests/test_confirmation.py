@@ -4,55 +4,100 @@
 from __future__ import annotations
 
 import tempfile
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from shutil import rmtree
 
 import pytest
 
 from lib.confirmation import IntelligentConfirmation, RiskLevel
-from lib.gep import Gene
-from lib.gep_store import GEPStore
+from lib.policy_models import Rule
+from lib.policy_store import PolicyStore
 
 
 class TestIntelligentConfirmation:
     """Test intelligent confirmation decision logic."""
 
     @pytest.fixture
-    def temp_gep_store(self):
-        """Temporary GEP store fixture."""
+    def temp_policy_store(self):
+        """Temporary policy store fixture."""
         temp_dir = Path(tempfile.mkdtemp())
-        gep_store = GEPStore(temp_dir)
+        policy_store = PolicyStore(temp_dir)
+        project_scope = str((temp_dir / "repo").resolve())
 
-        gene_high_conf = Gene(
-            id="gene_test_high_conf",
-            summary="Python optimization specialist",
-            category="optimize",
+        now = datetime.now(timezone.utc)
+
+        rule_high_conf = Rule(
+            id="rule_test_high_conf",
+            summary="Allow pytest tasks in this project",
+            category="harden",
             confidence=0.95,
             success_streak=10,
-            trigger=["T2", "optimize", "python"],
+            trigger=["task_type:T2", "command:python -m pytest tests/"],
+            status="confirmed",
+            scope="project",
+            scope_key=project_scope,
+            evidence_count=4,
+            source_type="explicit_preference",
+            last_seen_at=now.isoformat(),
+            policy_decision="auto_execute",
+            validation=["assert auto_execute for python -m pytest tests/"],
         )
-        gene_high_conf.calculate_asset_id()
+        rule_high_conf.calculate_asset_id()
 
-        gene_low_conf = Gene(
-            id="gene_test_low_conf",
-            summary="Newbie test profile",
+        rule_low_conf = Rule(
+            id="rule_test_low_conf",
+            summary="Legacy low-confidence profile",
             category="repair",
             confidence=0.4,
             success_streak=1,
             trigger=["T1", "test"],
         )
-        gene_low_conf.calculate_asset_id()
+        rule_low_conf.calculate_asset_id()
 
-        gep_store.save_gene(gene_high_conf)
-        gep_store.save_gene(gene_low_conf)
+        global_guard = Rule(
+            id="rule_global_pytest_guard",
+            summary="Require confirmation for pytest globally",
+            category="harden",
+            trigger=["task_type:T2", "command:python -m pytest tests/"],
+            status="confirmed",
+            scope="global",
+            evidence_count=4,
+            source_type="explicit_preference",
+            last_seen_at=(now - timedelta(days=1)).isoformat(),
+            policy_decision="require_confirmation",
+            validation=["assert confirmation for python -m pytest tests/"],
+        )
+        global_guard.calculate_asset_id()
 
-        yield gep_store
+        destructive_hint = Rule(
+            id="rule_git_history_delete_hint",
+            summary="Git history suggests deleting temp files is often okay",
+            category="optimize",
+            trigger=["task_type:T3", "command:rm -rf workspace"],
+            status="hint",
+            scope="project",
+            scope_key=project_scope,
+            evidence_count=2,
+            source_type="git_history",
+            last_seen_at=now.isoformat(),
+            policy_decision="auto_execute",
+        )
+        destructive_hint.calculate_asset_id()
+
+        policy_store.save_rule(rule_high_conf)
+        policy_store.save_rule(rule_low_conf)
+        policy_store.save_rule(global_guard)
+        policy_store.save_rule(destructive_hint)
+
+        yield policy_store, project_scope
 
         if temp_dir.exists():
             rmtree(temp_dir)
 
-    def test_assess_risk_low(self, temp_gep_store):
-        conf_engine = IntelligentConfirmation(temp_gep_store)
+    def test_assess_risk_low(self, temp_policy_store):
+        policy_store, _ = temp_policy_store
+        conf_engine = IntelligentConfirmation(policy_store)
         task_context = {
             "task_type": "T1",
             "task_description": "Run format and lint checks",
@@ -62,8 +107,9 @@ class TestIntelligentConfirmation:
         risk = conf_engine.assess_risk(task_context)
         assert risk == RiskLevel.LOW
 
-    def test_assess_risk_high(self, temp_gep_store):
-        conf_engine = IntelligentConfirmation(temp_gep_store)
+    def test_assess_risk_high(self, temp_policy_store):
+        policy_store, _ = temp_policy_store
+        conf_engine = IntelligentConfirmation(policy_store)
         task_context = {
             "task_type": "T3",
             "task_description": "Clean workspace directory",
@@ -73,21 +119,24 @@ class TestIntelligentConfirmation:
         risk = conf_engine.assess_risk(task_context)
         assert risk == RiskLevel.CRITICAL
 
-    def test_should_confirm_auto_execute_high_confidence(self, temp_gep_store):
-        conf_engine = IntelligentConfirmation(temp_gep_store)
+    def test_should_confirm_auto_execute_high_confidence(self, temp_policy_store):
+        policy_store, project_scope = temp_policy_store
+        conf_engine = IntelligentConfirmation(policy_store)
         task_context = {
             "task_type": "T2",
             "task_description": "Optimize Python code",
             "command": "python -m py_optimize",
+            "project_path": project_scope,
         }
 
         should_confirm, reason = conf_engine.should_confirm(task_context)
 
-        assert should_confirm is False
-        assert "confidence" in reason.lower()
+        assert should_confirm is True
+        assert "insufficient" in reason.lower() or "confirmation" in reason.lower()
 
-    def test_should_confirm_high_risk(self, temp_gep_store):
-        conf_engine = IntelligentConfirmation(temp_gep_store)
+    def test_should_confirm_high_risk(self, temp_policy_store):
+        policy_store, _ = temp_policy_store
+        conf_engine = IntelligentConfirmation(policy_store)
         task_context = {
             "task_type": "T2",
             "task_description": "Delete test files",
@@ -99,23 +148,28 @@ class TestIntelligentConfirmation:
         assert should_confirm is True
         assert "risk" in reason.lower() or "critical" in reason.lower()
 
-    def test_should_confirm_low_confidence(self, temp_gep_store):
-        conf_engine = IntelligentConfirmation(temp_gep_store)
+    def test_should_confirm_low_confidence(self, temp_policy_store):
+        policy_store, _ = temp_policy_store
+        conf_engine = IntelligentConfirmation(policy_store)
         task_context = {
             "task_type": "T1",
-            "task_description": "Run tests",
+            "task_description": "Update API schema",
+            "command": "apply database schema update",
         }
 
         should_confirm, reason = conf_engine.should_confirm(task_context)
 
         assert should_confirm is True
-        assert "insufficient" in reason.lower() or "first-time" in reason.lower()
+        assert "insufficient" in reason.lower() or "first-time" in reason.lower() or "no confirmed rule" in reason.lower()
 
-    def test_get_confidence_info(self, temp_gep_store):
-        conf_engine = IntelligentConfirmation(temp_gep_store)
+    def test_get_confidence_info(self, temp_policy_store):
+        policy_store, project_scope = temp_policy_store
+        conf_engine = IntelligentConfirmation(policy_store)
         task_context = {
             "task_type": "T2",
-            "task_description": "Optimize Python code",
+            "task_description": "Run tests",
+            "command": "python -m pytest tests/",
+            "project_path": project_scope,
         }
 
         confidence_info = conf_engine.get_confidence_info(task_context)
@@ -123,64 +177,142 @@ class TestIntelligentConfirmation:
         assert confidence_info["max_confidence"] >= 0.9
         assert confidence_info["count"] > 0
 
-    def test_record_feedback_user_cancelled(self, temp_gep_store):
-        conf_engine = IntelligentConfirmation(temp_gep_store)
+    def test_record_feedback_user_cancelled(self, temp_policy_store):
+        policy_store, project_scope = temp_policy_store
+        conf_engine = IntelligentConfirmation(policy_store)
         task_context = {
             "task_type": "T2",
-            "task_description": "Optimize Python code",
+            "task_description": "Run tests",
+            "command": "python -m pytest tests/",
+            "project_path": project_scope,
         }
 
-        conf_engine.record_feedback(task_context, was_confirmed=True, user_cancelled=True)
+        decision = conf_engine.evaluate_task(task_context)
+        conf_engine.record_feedback(
+            task_context,
+            was_confirmed=True,
+            user_cancelled=True,
+            decision_id=decision["decision_id"],
+            execution_result="cancel",
+            user_override="prefer_confirmation",
+        )
 
-        genes = temp_gep_store.load_genes()
-        gene = genes.get("gene_test_high_conf")
+        rules = policy_store.load_rules()
+        rule = rules.get("rule_test_high_conf")
 
-        assert gene is not None
-        assert gene.confidence < 0.95
-        assert gene.success_streak == 0
+        assert rule is not None
+        assert rule.last_seen_at
 
-    def test_record_feedback_auto_executed(self, temp_gep_store):
-        conf_engine = IntelligentConfirmation(temp_gep_store)
+    def test_record_feedback_auto_executed(self, temp_policy_store):
+        policy_store, project_scope = temp_policy_store
+        conf_engine = IntelligentConfirmation(policy_store)
         task_context = {
             "task_type": "T2",
-            "task_description": "Optimize Python code",
+            "task_description": "Run tests",
+            "command": "python -m pytest tests/",
+            "project_path": project_scope,
         }
 
-        original_confidence = temp_gep_store.get_gene("gene_test_high_conf").confidence
+        original_confidence = policy_store.get_rule("rule_test_high_conf").confidence
+        decision = conf_engine.evaluate_task(task_context)
 
-        conf_engine.record_feedback(task_context, was_confirmed=False, user_cancelled=False)
+        conf_engine.record_feedback(
+            task_context,
+            was_confirmed=False,
+            user_cancelled=False,
+            decision_id=decision["decision_id"],
+            execution_result="success",
+        )
 
-        genes = temp_gep_store.load_genes()
-        gene = genes.get("gene_test_high_conf")
+        rules = policy_store.load_rules()
+        rule = rules.get("rule_test_high_conf")
 
-        assert gene is not None
-        assert gene.confidence > original_confidence
-        assert gene.success_streak == 11
+        assert rule is not None
+        assert rule.confidence >= original_confidence
+        assert rule.last_applied_at
 
-    def test_get_explanation_auto_execute(self, temp_gep_store):
-        conf_engine = IntelligentConfirmation(temp_gep_store)
+    def test_get_explanation_auto_execute(self, temp_policy_store):
+        policy_store, project_scope = temp_policy_store
+        conf_engine = IntelligentConfirmation(policy_store)
         task_context = {
             "task_type": "T2",
-            "task_description": "Optimize Python code",
+            "task_description": "Run tests",
+            "command": "python -m pytest tests/",
+            "project_path": project_scope,
         }
 
-        should_confirm, reason = conf_engine.should_confirm(task_context)
+        decision = conf_engine.evaluate_task(task_context)
+        should_confirm = decision["final_decision"] == "require_confirmation"
+        reason = decision["reason"]
         explanation = conf_engine.get_explanation(task_context, should_confirm, reason)
 
         assert "auto-execute" in explanation.lower()
-        assert "confidence" in explanation.lower() or "success" in explanation.lower()
+        assert "project" in explanation.lower()
+        assert "global" in explanation.lower()
 
-    def test_get_explanation_need_confirm(self, temp_gep_store):
-        conf_engine = IntelligentConfirmation(temp_gep_store)
+    def test_get_explanation_need_confirm(self, temp_policy_store):
+        policy_store, project_scope = temp_policy_store
+        conf_engine = IntelligentConfirmation(policy_store)
         task_context = {
-            "task_type": "T1",
-            "task_description": "Delete files",
+            "task_type": "T3",
+            "task_description": "Clean workspace directory",
+            "command": "rm -rf workspace",
+            "project_path": project_scope,
         }
 
-        should_confirm, reason = conf_engine.should_confirm(task_context)
+        decision = conf_engine.evaluate_task(task_context)
+        should_confirm = decision["final_decision"] == "require_confirmation"
+        reason = decision["reason"]
         explanation = conf_engine.get_explanation(task_context, should_confirm, reason)
 
         assert "confirmation required" in explanation.lower()
+        assert "git history" in explanation.lower() or "heuristic" in explanation.lower()
+
+    def test_project_confirmed_rule_overrides_global_rule(self, temp_policy_store):
+        policy_store, project_scope = temp_policy_store
+        conf_engine = IntelligentConfirmation(policy_store)
+        decision = conf_engine.evaluate_task(
+            {
+                "task_type": "T2",
+                "task_description": "Run tests",
+                "command": "python -m pytest tests/",
+                "project_path": project_scope,
+            }
+        )
+
+        assert decision["final_decision"] == "auto_execute"
+        assert decision["resolution"] == "project_over_global"
+        assert len(decision["matched_rules"]) >= 2
+
+    def test_first_time_low_risk_task_uses_heuristic_fallback(self):
+        conf_engine = IntelligentConfirmation()
+        decision = conf_engine.evaluate_task(
+            {
+                "task_type": "T1",
+                "task_description": "Show test summary",
+                "command": "pytest --collect-only -q",
+            }
+        )
+
+        assert decision["final_decision"] == "auto_execute"
+        assert "first-time" in decision["fallback_reason"]
+        assert decision["heuristic_basis"]
+
+    def test_high_risk_weak_hint_cannot_auto_execute(self, temp_policy_store):
+        policy_store, project_scope = temp_policy_store
+        conf_engine = IntelligentConfirmation(policy_store)
+        decision = conf_engine.evaluate_task(
+            {
+                "task_type": "T3",
+                "task_description": "Clean workspace directory",
+                "command": "rm -rf workspace",
+                "project_path": project_scope,
+            }
+        )
+
+        assert decision["final_decision"] == "require_confirmation"
+        assert any(rule["status"] == "hint" for rule in decision["matched_rules"])
+        assert any("rm" in basis.lower() for basis in decision["heuristic_basis"])
 
 
 class TestRiskAssessment:

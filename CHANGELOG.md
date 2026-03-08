@@ -4,27 +4,35 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog and this project follows Semantic Versioning.
 
-## [1.0.1] - 2026-03-01
+## [2.0.0] - 2026-03-08
 
-### Fixed
+### Breaking Changes
 
-- **Legacy bilingual GEP compatibility**: Restore backward compatibility for legacy GEP data containing Chinese aliases
-  - Fixed `gep_to_md.py` to match bilingual (English + Chinese) alias keys
-  - Fixed `md_to_gep.py` to extract bilingual section mappings during migration
-  - Preserved SOUL capsule semantics during Markdown-to-GEP conversion
-
-### Added
-
-- **Compatibility regression tests**: Added `tests/test_gep_compatibility.py`
-  - Covers legacy Chinese data export/import roundtrip
-  - Validates bilingual alias handling
+- Public runtime and release documentation are now policy-only.
+- Canonical local storage is `.openclaw_memory/policy/` with `rules.json`, `playbooks.json`, and `policy_events.jsonl`.
+- Operational supervision is centered on `openclaw-align policy ...`.
 
 ### Changed
 
-- **Release hardening**: Strengthened quality gates
-  - Added `ConfirmationAPI` bootstrap validation
-  - Ensured all 132 tests pass before release
-  - Hardened documentation consistency checks
+- Refactored the runtime around the policy lifecycle `hint -> candidate -> confirmed -> suspended -> archived`.
+- Standardized the public CLI surface around `openclaw-align`, the compatibility alias `openclaw-alignment`, and `python -m openclaw_align`.
+- Removed deprecated naming, deprecated bootstrap paths, and deprecated release text from the repository.
+
+### Added
+
+- Stable public API surface for policy storage and confirmation integrations:
+  - `ConfirmationAPI`
+  - `create_api`
+  - `Rule`, `Playbook`, `PolicyEvent`
+  - `PolicyStore`
+  - `MarkdownToPolicyConverter`
+  - `PolicyToMarkdownExporter`
+
+## [1.0.1] - 2026-03-01
+
+### Changed
+
+- Release-line hardening around packaging, public CLI smoke coverage, and docs consistency validation before the policy cutover.
 
 ## [1.0.0] - 2026-03-01
 

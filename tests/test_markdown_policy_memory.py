@@ -1,36 +1,36 @@
 #!/usr/bin/env python3
-"""Backward-compatibility tests for legacy GEP data and markdown migration."""
+"""Tests for policy-memory markdown import and export paths."""
 
 from __future__ import annotations
 
 from pathlib import Path
 
-from lib.gep import Gene
-from lib.gep_to_md import GEPToMarkdownExporter
-from lib.md_to_gep import MarkdownToGEPConverter
+from lib.md_to_policy import MarkdownToPolicyConverter
+from lib.policy_models import Rule
+from lib.policy_to_md import PolicyToMarkdownExporter
 
 
-def test_export_user_md_accepts_legacy_chinese_gene_summaries(tmp_path: Path) -> None:
-    genes = {
-        "gene_basic_info": Gene(
-            id="gene_basic_info",
+def test_export_user_md_accepts_legacy_chinese_rule_summaries(tmp_path: Path) -> None:
+    rules = {
+        "rule_basic_info": Rule(
+            id="rule_basic_info",
             summary="\u57fa\u672c\u4fe1\u606f",
             strategy="- Name: Legacy User\n- Role: Engineer",
         ),
-        "gene_work_habits": Gene(
-            id="gene_work_habits",
+        "rule_work_habits": Rule(
+            id="rule_work_habits",
             summary="\u5de5\u4f5c\u4e60\u60ef\u504f\u597d",
             strategy="- Communication style: concise\n- Automation preference: high",
         ),
-        "gene_constraints": Gene(
-            id="gene_constraints",
+        "rule_constraints": Rule(
+            id="rule_constraints",
             summary="\u9879\u76ee\u7279\u5b9a\u7ea6\u675f",
             strategy="- Never run rm -rf in production",
         ),
     }
 
     output_path = tmp_path / "USER.md"
-    GEPToMarkdownExporter().export_genes_to_user_md(genes, output_path)
+    PolicyToMarkdownExporter().export_rules_to_user_md(rules, output_path)
     content = output_path.read_text(encoding="utf-8")
 
     assert "Legacy User" in content
@@ -38,27 +38,27 @@ def test_export_user_md_accepts_legacy_chinese_gene_summaries(tmp_path: Path) ->
     assert "Never run rm -rf in production" in content
 
 
-def test_export_agents_md_accepts_legacy_chinese_gene_summaries(tmp_path: Path) -> None:
-    genes = {
-        "gene_tool_dispatch": Gene(
-            id="gene_tool_dispatch",
+def test_export_agents_md_accepts_legacy_chinese_rule_summaries(tmp_path: Path) -> None:
+    rules = {
+        "rule_tool_dispatch": Rule(
+            id="rule_tool_dispatch",
             summary="Agent \u5de5\u5177\u8c03\u5ea6\u7b56\u7565",
             strategy="- Codex: backend tasks",
         ),
-        "gene_operation_rules": Gene(
-            id="gene_operation_rules",
+        "rule_operation_rules": Rule(
+            id="rule_operation_rules",
             summary="Agent \u64cd\u4f5c\u89c4\u5219",
             strategy="- Behavior changes require tests",
         ),
-        "gene_escalation": Gene(
-            id="gene_escalation",
+        "rule_escalation": Rule(
+            id="rule_escalation",
             summary="\u4e0d\u786e\u5b9a\u65f6\u5347\u7ea7\u7b56\u7565",
             strategy="- Ask for confirmation when uncertainty is high",
         ),
     }
 
     output_path = tmp_path / "AGENTS.md"
-    GEPToMarkdownExporter().export_agent_genes_to_agents_md(genes, output_path)
+    PolicyToMarkdownExporter().export_rules_to_agents_md(rules, output_path)
     content = output_path.read_text(encoding="utf-8")
 
     assert "Codex: backend tasks" in content
@@ -86,11 +86,11 @@ def test_convert_soul_md_preserves_english_semantics(tmp_path: Path) -> None:
         encoding="utf-8",
     )
 
-    capsule = MarkdownToGEPConverter().convert_soul_md_to_capsule(soul_md)
+    playbook = MarkdownToPolicyConverter().convert_soul_md_to_playbook(soul_md)
 
-    assert capsule is not None
-    assert "Never delete .env files" in capsule.summary
-    assert "Keep user data safe" in capsule.summary
+    assert playbook is not None
+    assert "Never delete .env files" in playbook.summary
+    assert "Keep user data safe" in playbook.summary
 
 
 def test_convert_soul_md_supports_legacy_chinese_sections(tmp_path: Path) -> None:
@@ -108,8 +108,8 @@ def test_convert_soul_md_supports_legacy_chinese_sections(tmp_path: Path) -> Non
         encoding="utf-8",
     )
 
-    capsule = MarkdownToGEPConverter().convert_soul_md_to_capsule(soul_md)
+    playbook = MarkdownToPolicyConverter().convert_soul_md_to_playbook(soul_md)
 
-    assert capsule is not None
-    assert "\u5b89\u5168\u7b2c\u4e00" in capsule.summary
-    assert "\u7981\u6b62\u5220\u9664 .env" in capsule.summary
+    assert playbook is not None
+    assert "\u5b89\u5168\u7b2c\u4e00" in playbook.summary
+    assert "\u7981\u6b62\u5220\u9664 .env" in playbook.summary

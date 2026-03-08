@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Dict, Any
 
 from .collector import GitPreferenceCollector
+from .policy_store import PolicyStore
 from .learner import PreferenceLearner, RLLearner
 from .paths import resolve_config_path, resolve_model_dir
 
@@ -20,6 +21,7 @@ class IntentAlignmentEngine:
     def __init__(self, repo_path: str = ".", config_path: str | Path | None = None):
         self.repo_path = Path(repo_path).resolve()
         self.config_path = resolve_config_path(config_path)
+        self.policy_store = PolicyStore.bootstrap(self.config_path.parent)
 
         # Initialize components
         self.collector = GitPreferenceCollector(str(self.repo_path))
@@ -43,6 +45,7 @@ class IntentAlignmentEngine:
 
         # Step 3: Save config
         self.learner.save_preferences()
+        self._sync_hint_rules()
 
         # Step 4: Generate report
         self.learner.generate_report()
@@ -60,6 +63,20 @@ class IntentAlignmentEngine:
         print("")
 
         return preferences
+
+    def _sync_hint_rules(self) -> None:
+        """Persist Git-derived weak hints without promoting them into confirmed rules."""
+        hint_rules = self.learner.build_hint_rules(scope_key=str(self.repo_path))
+        if not hint_rules:
+            return
+
+        rules = self.policy_store.load_rules()
+        for rule in hint_rules:
+            existing = rules.get(rule.id)
+            if existing and existing.status in {"candidate", "confirmed"}:
+                continue
+            rules[rule.id] = rule
+        self.policy_store.save_rules(rules)
 
     def get_current_preferences(self) -> Dict[str, Any]:
         """Return currently learned preferences."""
@@ -82,7 +99,7 @@ class IntentAlignmentEngine:
             with open(self.config_path, 'r') as f:
                 config = json.load(f)
         else:
-            config = {"version": "1.0.1"}
+            config = {"version": "2.0.0"}
 
         config["learned_preferences"] = current
 

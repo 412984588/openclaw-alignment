@@ -23,6 +23,12 @@ def test_pyproject_readme_points_to_existing_file() -> None:
     assert readme_path.exists(), f"readme file does not exist: {readme_path.name}"
 
 
+def test_pyproject_exposes_public_cli_entrypoint() -> None:
+    repo_root = _repo_root()
+    content = (repo_root / "pyproject.toml").read_text(encoding="utf-8")
+    assert 'openclaw-align = "openclaw_align.cli:main"' in content
+
+
 def test_import_lib_works_without_torch_installed() -> None:
     repo_root = _repo_root()
     script = (

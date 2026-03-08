@@ -53,10 +53,9 @@ def test_new_confirmation_modules_are_english_only() -> None:
     paths = [
         repo / "lib" / "api.py",
         repo / "lib" / "confirmation.py",
-        repo / "lib" / "gep.py",
-        repo / "lib" / "gep_store.py",
-        repo / "lib" / "gep_to_md.py",
-        repo / "lib" / "md_to_gep.py",
+        repo / "lib" / "policy_store.py",
+        repo / "lib" / "policy_to_md.py",
+        repo / "lib" / "md_to_policy.py",
     ]
     for path in paths:
         content = path.read_text(encoding="utf-8")

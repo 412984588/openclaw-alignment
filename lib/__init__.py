@@ -1,8 +1,8 @@
 """
-OpenClaw Alignment - Reinforcement Learning Alignment System
+OpenClaw Alignment - explainable confirmation and local policy memory.
 
-Phase 1-2: Core features and optimizations
-Phase 3: Advanced features（Distributed training、Automatic parameter adjustment、monitor、Performance optimization）
+Phase 1-2: confirmation policy core, local policy memory, and optional RL optimization
+Phase 3: advanced optional modules (distributed training, tuning, monitoring, performance)
 """
 
 from __future__ import annotations
@@ -24,11 +24,11 @@ from .paths import (
     resolve_model_dir,
 )
 
-# GEP module（Gene Evolution Protocol）
-from .gep import Gene, Capsule, Event
-from .gep_store import GEPStore
-from .md_to_gep import MarkdownToGEPConverter
-from .gep_to_md import GEPToMarkdownExporter
+# Policy memory module
+from .policy_models import Rule, Playbook, PolicyEvent
+from .policy_store import PolicyStore
+from .md_to_policy import MarkdownToPolicyConverter
+from .policy_to_md import PolicyToMarkdownExporter
 
 # Intelligent Confirmation module
 from .confirmation import IntelligentConfirmation, RiskLevel
@@ -135,13 +135,13 @@ __all__ = [
     "get_state_dir",
     "resolve_config_path",
     "resolve_model_dir",
-    # GEP
-    "Gene",
-    "Capsule",
-    "Event",
-    "GEPStore",
-    "MarkdownToGEPConverter",
-    "GEPToMarkdownExporter",
+    # Policy memory
+    "Rule",
+    "Playbook",
+    "PolicyEvent",
+    "PolicyStore",
+    "MarkdownToPolicyConverter",
+    "PolicyToMarkdownExporter",
     # Intelligent Confirmation
     "IntelligentConfirmation",
     "RiskLevel",
@@ -184,4 +184,4 @@ def __getattr__(name: str) -> Any:
     raise AttributeError(f"module 'lib' has no attribute '{name}'")
 
 
-__version__ = "1.0.1"
+__version__ = "2.0.0"

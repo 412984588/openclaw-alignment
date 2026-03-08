@@ -1,21 +1,26 @@
 #!/usr/bin/env python3
-"""
-OpenClaw Alignment command-line interface.
+"""OpenClaw Alignment command-line interface."""
 
-Provides one-command initialization and local memory configuration management.
-"""
+from __future__ import annotations
 
 import argparse
 import json
 import shutil
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
+
+from .api import ConfirmationAPI
+from .confirmation import IntelligentConfirmation
+from .md_to_policy import MarkdownToPolicyConverter
+from .policy_store import PolicyStore
+from .policy_to_md import PolicyToMarkdownExporter
 
 
 class OpenClawAlignmentCLI:
     """Main OpenClaw Alignment CLI class."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.memory_dir_name = ".openclaw_memory"
         self.config_file_name = "config.json"
         self.templates = {
@@ -25,703 +30,401 @@ class OpenClawAlignmentCLI:
         }
 
     def get_template_dir(self) -> Path:
-        """Return the packaged template directory."""
-        # Resolve templates from the installed package
         package_dir = Path(__file__).parent
-        template_dir = package_dir.parent / "templates"
-        return template_dir
+        return package_dir.parent / "templates"
 
     def get_memory_dir(self, cwd: Optional[Path] = None) -> Path:
-        """Return the memory directory path."""
-        if cwd is None:
-            cwd = Path.cwd()
-        return cwd / self.memory_dir_name
+        return (cwd or Path.cwd()) / self.memory_dir_name
+
+    def get_policy_dir(self, cwd: Optional[Path] = None) -> Path:
+        return self.get_memory_dir(cwd) / "policy"
+
+    def _open_policy_store(
+        self,
+        cwd: Optional[Path] = None,
+        *,
+        ensure_files: bool = False,
+    ) -> PolicyStore:
+        return PolicyStore.bootstrap(self.get_memory_dir(cwd), ensure_files=ensure_files)
 
     def init(self, target_dir: Optional[str] = None, force: bool = False) -> bool:
-        """
-        Initialize OpenClaw Alignment memory files.
-
-        Args:
-            target_dir: Target directory (defaults to current working directory)
-            force: Overwrite existing files when True
-
-        Returns:
-            True if initialization succeeds
-        """
-        if target_dir:
-            cwd = Path(target_dir).resolve()
-        else:
-            cwd = Path.cwd()
-
+        cwd = Path(target_dir).resolve() if target_dir else Path.cwd()
         memory_dir = self.get_memory_dir(cwd)
         template_dir = self.get_template_dir()
 
-        # Validate template directory
         if not template_dir.exists():
-            print(f"❌ Error: template directory not found: {template_dir}")
-            print("   Make sure openclaw-alignment is installed correctly")
+            print(f"Error: template directory not found: {template_dir}")
             return False
 
-        # Check whether the memory directory already exists
-        if memory_dir.exists():
-            if not force:
-                print(f"⚠️  Memory directory already exists: {memory_dir}")
-                print("   Use --force to re-initialize")
-                return False
-            print("🔄 Forcing re-initialization...")
-        else:
-            print("🚀 Initializing OpenClaw Alignment memory...")
-
-        # Create memory directory
         memory_dir.mkdir(parents=True, exist_ok=True)
+        store = self._open_policy_store(cwd)
+        policy_dir = store.base_dir
 
-        # Create GEP subdirectory
-        gep_dir = memory_dir / "gep"
-        gep_dir.mkdir(parents=True, exist_ok=True)
+        if not force and self._has_markdown_seed(memory_dir) and not store.load_rules() and not store.load_playbooks():
+            MarkdownToPolicyConverter().migrate_all(memory_dir, store)
 
-        # Check for existing MD files and auto-migrate
-        if not force:
-            user_md = memory_dir / "USER.md"
-            soul_md = memory_dir / "SOUL.md"
-            agents_md = memory_dir / "AGENTS.md"
+        if force or not store.rules_file.exists():
+            store.save_rules({})
+            print(f"Created: {store.rules_file}")
+        if force or not store.playbooks_file.exists():
+            store.save_playbooks({})
+            print(f"Created: {store.playbooks_file}")
+        if force or not store.policy_events_file.exists():
+            store.policy_events_file.touch()
+            print(f"Created: {store.policy_events_file}")
 
-            if user_md.exists() or soul_md.exists() or agents_md.exists():
-                print("🔄 Existing markdown files detected. Migrating to GEP format...")
-                from .md_to_gep import MarkdownToGEPConverter
-                from .gep_store import GEPStore
-
-                gep_store = GEPStore(gep_dir)
-                converter = MarkdownToGEPConverter()
-                converter.migrate_all(memory_dir, gep_store)
-
-        # Initialize empty genes.json and capsules.json if they don't exist
-        from .gep_store import GEPStore
-        gep_store = GEPStore(gep_dir)
-
-        if not gep_store.genes_file.exists() or force:
-            gep_store.save_genes({})
-            print(f"✅ Created: {gep_store.genes_file}")
-
-        if not gep_store.capsules_file.exists() or force:
-            gep_store.save_capsules({})
-            print(f"✅ Created: {gep_store.capsules_file}")
-
-        # Create empty events.jsonl
-        if not gep_store.events_file.exists() or force:
-            gep_store.events_file.touch()
-            print(f"✅ Created: {gep_store.events_file}")
-
-        # Copy template files
-        success_count = 0
         for target_name, template_name in self.templates.items():
             template_file = template_dir / template_name
             target_file = memory_dir / target_name
-
             if not template_file.exists():
-                print(f"⚠️  Template file missing: {template_name}")
                 continue
-
             if target_file.exists() and not force:
-                print(f"⏭️  Skipped existing file: {target_name}")
                 continue
-
             shutil.copy2(template_file, target_file)
-            success_count += 1
-            print(f"✅ Created: {target_file}")
+            print(f"Created: {target_file}")
 
-        # Create config file
         config_file = memory_dir / self.config_file_name
-        if not config_file.exists() or force:
+        if force or not config_file.exists():
             config = {
-                "version": "1.0.1",
-                "initialized_at": str(Path.cwd()),
+                "version": "2.0.0",
+                "initialized_at": datetime.now(timezone.utc).isoformat(),
+                "initialized_in": str(cwd),
                 "memory_path": str(memory_dir),
                 "features": {
-                    "rl_enabled": True,
                     "auto_learning": True,
                     "safety_checks": True,
+                    "policy_engine": "autonomous_execution",
                 },
             }
-            with open(config_file, "w", encoding="utf-8") as f:
-                json.dump(config, f, indent=2, ensure_ascii=False)
-            print(f"✅ Created: {config_file}")
+            config_file.write_text(json.dumps(config, indent=2, ensure_ascii=False), encoding="utf-8")
+            print(f"Created: {config_file}")
 
-        # Create .gitignore
         gitignore_file = memory_dir / ".gitignore"
-        if not gitignore_file.exists() or force:
-            with open(gitignore_file, "w", encoding="utf-8") as f:
-                f.write("# OpenClaw Alignment local files\n")
-                f.write("# Do not commit these files\n")
-                f.write("config.json\n")
-                f.write("*.backup\n")
-                f.write("*.cache\n")
-            print(f"✅ Created: {gitignore_file}")
+        if force or not gitignore_file.exists():
+            gitignore_file.write_text(
+                "# OpenClaw Alignment local files\n"
+                "# Do not commit these files\n"
+                "config.json\n"
+                "*.backup\n"
+                "*.cache\n",
+                encoding="utf-8",
+            )
+            print(f"Created: {gitignore_file}")
 
-        # Print success summary
         print("")
-        print("=" * 60)
-        print("✨ Initialization complete!")
-        print("=" * 60)
-        print(f"📂 Memory directory: {memory_dir}")
-        print("📄 Created files:")
-        for target_name in self.templates.keys():
-            print(f"   - {target_name}")
-        print(f"   - {self.config_file_name}")
-        print("   - .gitignore")
-        print("")
-        print("📝 Next steps:")
-        print("   1. Edit USER.md to define your personal preferences")
-        print("   2. Review SOUL.md to confirm system principles")
-        print("   3. Check AGENTS.md to see available tools")
-        print("   4. Run: openclaw-align analyze")
-        print("")
-
+        print("Initialization complete.")
+        print(f"Policy memory: {memory_dir}")
+        print(f"Policy assets: {policy_dir}")
         return True
 
+    def _has_markdown_seed(self, memory_dir: Path) -> bool:
+        return any((memory_dir / name).exists() for name in self.templates)
+
     def status(self) -> None:
-        """Show current local status."""
-        cwd = Path.cwd()
-        memory_dir = self.get_memory_dir(cwd)
+        memory_dir = self.get_memory_dir()
+        store = self._open_policy_store()
+        policy_dir = store.base_dir
         config_file = memory_dir / self.config_file_name
-        gep_dir = memory_dir / "gep"
 
-        print("📊 OpenClaw Alignment status")
+        print("OpenClaw Alignment status")
         print("")
-        print(f"📂 Memory directory: {memory_dir}")
-        print(f"   Status: {'✅ Exists' if memory_dir.exists() else '❌ Missing'}")
+        print(f"Policy memory: {memory_dir}")
+        print(f"Status: {'present' if memory_dir.exists() else 'missing'}")
         print("")
 
-        if memory_dir.exists():
-            print("📄 Configuration files:")
-
-            # Check config file
-            if config_file.exists():
-                with open(config_file, "r", encoding="utf-8") as f:
-                    config = json.load(f)
-                print(f"   ✅ {self.config_file_name}")
-                print(f"      Version: {config.get('version', 'unknown')}")
-                print(f"      RL enabled: {config.get('features', {}).get('rl_enabled', False)}")
-            else:
-                print(f"   ❌ {self.config_file_name} (missing)")
-
-            # Check template files
-            for target_name in self.templates.keys():
-                target_file = memory_dir / target_name
-                status = "✅" if target_file.exists() else "❌"
-                print(f"   {status} {target_name}")
-
-            # Check GEP directory
-            print("")
-            print("🧬 GEP Assets:")
-            if gep_dir.exists():
-                from .gep_store import GEPStore
-                gep_store = GEPStore(gep_dir)
-                stats = gep_store.get_stats()
-                print("   ✅ gep/ directory")
-                print(f"      Genes: {stats['total_genes']}")
-                print(f"      Capsules: {stats['total_capsules']}")
-                print(f"      Events: {stats['total_events']}")
-            else:
-                print("   ❌ gep/ directory (missing)")
+        if config_file.exists():
+            config = json.loads(config_file.read_text(encoding="utf-8"))
+            print(f"Config version: {config.get('version', 'unknown')}")
         else:
-            print("💡 Tip: run 'openclaw-align init' to initialize memory files")
-        print("")
+            print("Config version: missing")
+
+        stats = store.get_stats()
+        print(f"Rules: {stats['total_rules']}")
+        print(f"Playbooks: {stats['total_playbooks']}")
+        print(f"Policy events: {stats['total_policy_events']}")
+        print(f"Policy directory: {policy_dir}")
 
     def version(self) -> None:
-        """Show version info."""
         from . import __version__
+
         print(f"OpenClaw Alignment CLI v{__version__}")
-        print("")
-        print(f"Python: {__import__('sys').version}")
-        print(f"Install path: {Path(__file__).parent.parent}")
 
-    def gene_list(self) -> None:
-        """List all genes."""
-        cwd = Path.cwd()
-        memory_dir = self.get_memory_dir(cwd)
-        gep_dir = memory_dir / "gep"
+    def rule_list(self) -> None:
+        store = self._open_policy_store()
+        rules = store.load_rules()
+        if not rules:
+            print("No rules found.")
+            return
+        print(f"Rules ({len(rules)} total):")
+        for rule in rules.values():
+            print(f"  {rule}")
 
-        if not gep_dir.exists():
-            print("❌ GEP directory not found. Run 'openclaw-align init' first.")
+    def rule_show(self, rule_id: str) -> None:
+        store = self._open_policy_store()
+        rule = store.get_rule(rule_id)
+        if rule is None:
+            print(f"Rule not found: {rule_id}")
             return
 
-        from .gep_store import GEPStore
-        gep_store = GEPStore(gep_dir)
-        genes = gep_store.load_genes()
-
-        if not genes:
-            print("📋 No genes found.")
-            return
-
-        print(f"📋 Genes ({len(genes)} total):")
-        print("")
-        for gene_id, gene in genes.items():
-            print(f"   {gene}")
-
-    def gene_show(self, gene_id: str) -> None:
-        """Show gene details."""
-        cwd = Path.cwd()
-        memory_dir = self.get_memory_dir(cwd)
-        gep_dir = memory_dir / "gep"
-
-        if not gep_dir.exists():
-            print("❌ GEP directory not found. Run 'openclaw-align init' first.")
-            return
-
-        from .gep_store import GEPStore
-        gep_store = GEPStore(gep_dir)
-        gene = gep_store.get_gene(gene_id)
-
-        if not gene:
-            print(f"❌ Gene not found: {gene_id}")
-            return
-
-        print(f"📄 Gene Details: {gene.id}")
-        print("")
-        print(f"Summary: {gene.summary}")
-        print(f"Category: {gene.category}")
-        print(f"Confidence: {gene.confidence:.2f}")
-        print(f"Success Streak: {gene.success_streak}")
-        print(f"Asset ID: {gene.asset_id}")
-        print("")
-        print("Strategy:")
-        print(gene.strategy)
-        if gene.trigger:
-            print("")
-            print(f"Triggers: {', '.join(gene.trigger)}")
-        if gene.preconditions:
-            print("")
-            print("Preconditions:")
-            for cond in gene.preconditions:
-                print(f"  - {cond}")
-        if gene.postconditions:
-            print("")
-            print("Postconditions:")
-            for cond in gene.postconditions:
-                print(f"  - {cond}")
-        if gene.validation:
-            print("")
+        print(f"Rule Details: {rule.id}")
+        print(f"Summary: {rule.summary}")
+        print(f"Status: {rule.status}")
+        print(f"Scope: {rule.scope}")
+        if rule.scope_key:
+            print(f"Scope Key: {rule.scope_key}")
+        print(f"Policy Decision: {rule.policy_decision or '(none)'}")
+        print(f"Evidence Count: {rule.evidence_count}")
+        print(f"Risk Level: {rule.risk_level or '(unset)'}")
+        if rule.validation:
             print("Validation:")
-            for test in gene.validation:
+            for test in rule.validation:
                 print(f"  - {test}")
 
-    def capsule_list(self) -> None:
-        """List all capsules."""
-        cwd = Path.cwd()
-        memory_dir = self.get_memory_dir(cwd)
-        gep_dir = memory_dir / "gep"
-
-        if not gep_dir.exists():
-            print("❌ GEP directory not found. Run 'openclaw-align init' first.")
+    def playbook_list(self) -> None:
+        store = self._open_policy_store()
+        playbooks = store.load_playbooks()
+        if not playbooks:
+            print("No playbooks found.")
             return
+        print(f"Playbooks ({len(playbooks)} total):")
+        for playbook in playbooks.values():
+            print(f"  {playbook}")
 
-        from .gep_store import GEPStore
-        gep_store = GEPStore(gep_dir)
-        capsules = gep_store.load_capsules()
-
-        if not capsules:
-            print("📋 No capsules found.")
+    def playbook_show(self, playbook_id: str) -> None:
+        store = self._open_policy_store()
+        playbook = store.get_playbook(playbook_id)
+        if playbook is None:
+            print(f"Playbook not found: {playbook_id}")
             return
-
-        print(f"📋 Capsules ({len(capsules)} total):")
-        print("")
-        for capsule_id, capsule in capsules.items():
-            print(f"   {capsule}")
-
-    def capsule_show(self, capsule_id: str) -> None:
-        """Show capsule details."""
-        cwd = Path.cwd()
-        memory_dir = self.get_memory_dir(cwd)
-        gep_dir = memory_dir / "gep"
-
-        if not gep_dir.exists():
-            print("❌ GEP directory not found. Run 'openclaw-align init' first.")
-            return
-
-        from .gep_store import GEPStore
-        gep_store = GEPStore(gep_dir)
-        capsule = gep_store.get_capsule(capsule_id)
-
-        if not capsule:
-            print(f"❌ Capsule not found: {capsule_id}")
-            return
-
-        print(f"📄 Capsule Details: {capsule.id}")
-        print("")
-        print(f"Summary: {capsule.summary}")
-        print(f"Category: {capsule.category}")
-        print(f"Confidence: {capsule.confidence:.2f}")
-        print(f"Asset ID: {capsule.asset_id}")
-        print("")
-        if capsule.genes_used:
-            print(f"Genes Used ({len(capsule.genes_used)}):")
-            for gene_id in capsule.genes_used:
-                print(f"  - {gene_id}")
-        else:
-            print("Genes Used: (none)")
-        if capsule.trigger:
-            print("")
-            print(f"Triggers: {', '.join(capsule.trigger)}")
+        print(f"Playbook Details: {playbook.id}")
+        print(f"Summary: {playbook.summary}")
+        print(f"Category: {playbook.category}")
+        print(f"Confidence: {playbook.confidence:.2f}")
+        print(f"Rules Used: {', '.join(playbook.rules_used) if playbook.rules_used else '(none)'}")
 
     def events_show(self, limit: int = 20) -> None:
-        """Show recent evolution events."""
-        cwd = Path.cwd()
-        memory_dir = self.get_memory_dir(cwd)
-        gep_dir = memory_dir / "gep"
-
-        if not gep_dir.exists():
-            print("❌ GEP directory not found. Run 'openclaw-align init' first.")
-            return
-
-        from .gep_store import GEPStore
-        gep_store = GEPStore(gep_dir)
-        events = gep_store.get_events(limit)
-
+        store = self._open_policy_store()
+        events = store.get_events(limit)
         if not events:
-            print("📋 No events found.")
+            print("No policy events found.")
             return
-
-        print(f"📋 Recent Evolution Events ({len(events)} shown):")
-        print("")
+        print(f"Recent policy events ({len(events)} shown):")
         for event in events:
-            print(f"   {event}")
+            print(f"  {event}")
 
     def export_md(self) -> None:
-        """Export markdown files from Gene/Capsule assets."""
-        cwd = Path.cwd()
-        memory_dir = self.get_memory_dir(cwd)
-        gep_dir = memory_dir / "gep"
-
-        if not gep_dir.exists():
-            print("❌ GEP directory not found. Run 'openclaw-align init' first.")
-            return
-
-        from .gep_to_md import GEPToMarkdownExporter
-        exporter = GEPToMarkdownExporter()
-        exporter.export_all(gep_dir, memory_dir)
-
-        print("")
-        print("✨ Markdown files exported successfully!")
+        memory_dir = self.get_memory_dir()
+        PolicyToMarkdownExporter().export_all(self._open_policy_store().base_dir, memory_dir)
+        print("Markdown export completed.")
 
     def confidence_history(self, task_type: Optional[str] = None) -> None:
-        """Show confidence history."""
-        cwd = Path.cwd()
-        memory_dir = self.get_memory_dir(cwd)
-        gep_dir = memory_dir / "gep"
-
-        if not gep_dir.exists():
-            print("❌ GEP directory not found. Run 'openclaw-align init' first.")
+        rules = ConfirmationAPI(memory_dir=self.get_memory_dir()).get_confidence_history(task_type)["rules"]
+        if not rules:
+            print("No rules found.")
             return
-
-        from .gep_store import GEPStore
-        gep_store = GEPStore(gep_dir)
-        genes = gep_store.load_genes()
-
-        if not genes:
-            print("📋 No genes found. Confidence history will be built as you execute tasks.")
-            return
-
-        # Filter genes
-        if task_type:
-            relevant_genes = [g for g in genes.values() if task_type in g.trigger]
-        else:
-            # Show all genes with confidence > 0.5
-            relevant_genes = [g for g in genes.values() if g.confidence > 0.5]
-
-        if not relevant_genes:
-            if task_type:
-                print(f"📋 No genes found for task type: {task_type}")
-            else:
-                print("📋 No high-confidence genes found yet (> 0.5)")
-            return
-
-        # Sort by confidence
-        relevant_genes = sorted(relevant_genes, key=lambda g: -g.confidence)
-
-        print(f"📊 Confidence History ({len(relevant_genes)} genes)")
+        print(f"Confidence History ({len(rules)} rules)")
         print("")
-        print(f"{'Confidence':<12} {'Streak':<8} {'Gene Summary'}")
-        print("-" * 60)
-        for gene in relevant_genes:
-            print(f"{gene.confidence:<12.2f} {gene.success_streak:<8} {gene.summary}")
+        print(f"{'Confidence':<12} {'Streak':<8} {'Status':<12} {'Scope':<10} {'Rule Summary'}")
+        print("-" * 88)
+        for rule in rules:
+            print(
+                f"{rule['confidence']:<12.2f} {rule['success_streak']:<8} "
+                f"{rule['status']:<12} {rule['scope']:<10} {rule['summary']}"
+            )
+
+    def decision_history(self, limit: int = 10) -> None:
+        decisions = ConfirmationAPI(memory_dir=self.get_memory_dir()).get_recent_decisions(limit)["decisions"]
+        if not decisions:
+            print("No decision history found.")
+            return
+        print(f"Recent Decisions ({len(decisions)} shown)")
         print("")
+        for decision in decisions:
+            outcome = decision.get("execution_result") or "pending"
+            print(
+                f"- {decision['decision_id']} | {decision['final_decision']} | "
+                f"risk={decision['risk_level']} | outcome={outcome}"
+            )
+            print(f"  summary: {decision['task_summary']}")
+            print(f"  reason: {decision['reason']}")
+            print(f"  resolution: {decision['resolution']}")
+
+    def policy_status(self) -> None:
+        snapshot = self._open_policy_store().get_policy_status_snapshot()
+        print("Policy lifecycle status")
+        print("")
+        for status, count in snapshot["status_counts"].items():
+            print(f"  {status}: {count}")
+        print("")
+        print(f"Recent promotions: {len(snapshot['recent_promotions'])}")
+        print(f"Recent suspensions: {len(snapshot['recent_suspensions'])}")
+        print(f"High-risk confirmed: {len(snapshot['risky_confirmed_rules'])}")
+        print(f"Special scopes: {len(snapshot['special_scopes'])}")
+
+    def policy_recent(self, limit: int = 10) -> None:
+        events = self._open_policy_store().get_recent_lifecycle_events(limit=limit)
+        if not events:
+            print("No lifecycle events found.")
+            return
+        print(f"Recent policy lifecycle events ({len(events)} shown)")
+        for event in events:
+            payload = event.payload
+            print(
+                f"- {event.event_type} | {payload.get('rule_id', 'unknown')} | "
+                f"{payload.get('trigger', 'n/a')}"
+            )
+
+    def policy_risky(self) -> None:
+        rules = self._open_policy_store().get_risky_confirmed_rules()
+        if not rules:
+            print("No high-risk confirmed auto-execute rules.")
+            return
+        print("High-risk confirmed auto-execute rules")
+        for rule in rules:
+            print(f"- {rule.id} | {rule.risk_level} | {rule.scope}:{rule.scope_key or '*'}")
+            print(f"  {rule.summary}")
+
+    def policy_suspended(self, limit: int = 20) -> None:
+        rules = self._open_policy_store().get_rules_by_status("suspended")[:limit]
+        if not rules:
+            print("No suspended rules.")
+            return
+        print(f"Suspended rules ({len(rules)} shown)")
+        for rule in rules:
+            print(
+                f"- {rule.id} | {rule.scope}:{rule.scope_key or '*'} | "
+                f"{rule.suspension_reason or 'unknown'}"
+            )
+            print(f"  {rule.summary}")
 
     def execute_demo(self, task_type: str = "T2", description: str = "run tests") -> None:
-        """
-        Demonstrate the intelligent confirmation flow.
-
-        Args:
-            task_type: Task type (T1/T2/T3/T4)
-            description: Task description
-        """
-        cwd = Path.cwd()
-        memory_dir = self.get_memory_dir(cwd)
-        gep_dir = memory_dir / "gep"
-
-        if not gep_dir.exists():
-            print("❌ GEP directory not found. Run 'openclaw-align init' first.")
-            return
-
-        from .gep_store import GEPStore
-        from .confirmation import IntelligentConfirmation
-
-        gep_store = GEPStore(gep_dir)
-        conf_engine = IntelligentConfirmation(gep_store)
-
-        # Build task context
+        store = self._open_policy_store()
+        engine = IntelligentConfirmation(store)
         task_context = {
             "task_type": task_type,
             "task_description": description,
             "command": f"npm run {description}",
-            "files": []
+            "files": [],
         }
-
-        print("🎯 Task execution demo")
-        print(f"   Type: {task_type}")
-        print(f"   Description: {description}")
-        print("")
-
-        # Decision: whether confirmation is required
-        should_confirm, reason = conf_engine.should_confirm(task_context)
-
-        if not should_confirm:
-            # Auto-execute
-            explanation = conf_engine.get_explanation(task_context, False, reason)
-            print(explanation)
-
-            # Simulate a successful execution
-            print(f"⚡ Running command: {task_context['command']}")
-            print("✅ Task completed")
-
-            # Record feedback (auto execution success)
-            conf_engine.record_feedback(
-                task_context,
-                was_confirmed=False,
-                user_cancelled=False
-            )
-            print("📈 Confidence increased (+0.05)")
-
-        else:
-            # Confirmation required
-            print(f"🤔 Confirmation required: {reason}")
-            print("")
-            response = input("Continue execution? [Y/n]: ").strip().lower()
-
-            if response == 'n':
-                print("❌ User cancelled execution")
-
-                # Record feedback (user cancelled)
-                conf_engine.record_feedback(
-                    task_context,
-                    was_confirmed=True,
-                    user_cancelled=True
-                )
-                print("📉 Confidence decreased (-0.2)")
-            else:
-                print(f"⚡ Running command: {task_context['command']}")
-                print("✅ Task completed")
-
-                # Record feedback (user confirmed and succeeded)
-                conf_engine.record_feedback(
-                    task_context,
-                    was_confirmed=True,
-                    user_cancelled=False
-                )
-
-        print("")
+        should_confirm, reason = engine.should_confirm(task_context)
+        print(engine.get_explanation(task_context, should_confirm, reason))
 
 
-def main():
-    """CLI entrypoint."""
+def main() -> None:
     parser = argparse.ArgumentParser(
-        description="OpenClaw Alignment - reinforcement-learning driven alignment system",
+        description="OpenClaw Alignment - explainable autonomous execution policy engine",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Examples:
-  openclaw-align init                  Initialize memory files
-  openclaw-align init --force          Force re-initialization
-  openclaw-align init ~/projects       Initialize under a target directory
-  openclaw-align status                Show current status
-  openclaw-align version               Show version
-  openclaw-align gene list             List all genes
-  openclaw-align gene show <id>        Show gene details
-  openclaw-align capsule list          List all capsules
-  openclaw-align events                Show recent evolution events
-  openclaw-align export-md             Export GEP to Markdown format
-  openclaw-align confidence-history    Show confidence history
-  openclaw-align execute-demo          Demo intelligent confirmation workflow
-        """
     )
-
-    parser.add_argument(
-        "--version",
-        action="store_true",
-        help="Show version information"
-    )
-
+    parser.add_argument("--version", action="store_true", help="Show version information")
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
 
-    # init command
-    init_parser = subparsers.add_parser(
-        "init",
-        help="Initialize memory files"
-    )
-    init_parser.add_argument(
-        "target_dir",
-        nargs="?",
-        help="Target directory (defaults to current directory)"
-    )
-    init_parser.add_argument(
-        "--force",
-        action="store_true",
-        help="Force overwrite existing files"
-    )
+    init_parser = subparsers.add_parser("init", help="Initialize memory files")
+    init_parser.add_argument("target_dir", nargs="?", help="Target directory")
+    init_parser.add_argument("--force", action="store_true", help="Force overwrite existing files")
 
-    # status command
-    subparsers.add_parser(
-        "status",
-        help="Show current status"
-    )
+    subparsers.add_parser("status", help="Show current status")
 
-    # analyze command (keeps original behavior)
-    analyze_parser = subparsers.add_parser(
-        "analyze",
-        help="Analyze Git history and learn preferences"
-    )
-    analyze_parser.add_argument(
-        "--repo",
-        default=".",
-        help="Git repository path"
-    )
-    analyze_parser.add_argument(
-        "--commits",
-        type=int,
-        default=100,
-        help="Number of commits to analyze"
-    )
+    analyze_parser = subparsers.add_parser("analyze", help="Analyze Git history and learn preferences")
+    analyze_parser.add_argument("--repo", default=".", help="Git repository path")
+    analyze_parser.add_argument("--commits", type=int, default=100, help="Number of commits to analyze")
 
-    # gene command
-    gene_parser = subparsers.add_parser(
-        "gene",
-        help="Gene management commands"
-    )
-    gene_subparsers = gene_parser.add_subparsers(dest="gene_command", help="Gene actions")
+    rule_parser = subparsers.add_parser("rule", help="Rule management commands")
+    rule_subparsers = rule_parser.add_subparsers(dest="rule_command", help="Rule actions")
+    rule_subparsers.add_parser("list", help="List all rules")
+    rule_show_parser = rule_subparsers.add_parser("show", help="Show rule details")
+    rule_show_parser.add_argument("rule_id", help="Rule ID")
 
-    gene_subparsers.add_parser("list", help="List all genes")
-    gene_show_parser = gene_subparsers.add_parser("show", help="Show gene details")
-    gene_show_parser.add_argument("gene_id", help="Gene ID")
+    playbook_parser = subparsers.add_parser("playbook", help="Playbook management commands")
+    playbook_subparsers = playbook_parser.add_subparsers(dest="playbook_command", help="Playbook actions")
+    playbook_subparsers.add_parser("list", help="List all playbooks")
+    playbook_show_parser = playbook_subparsers.add_parser("show", help="Show playbook details")
+    playbook_show_parser.add_argument("playbook_id", help="Playbook ID")
 
-    # capsule command
-    capsule_parser = subparsers.add_parser(
-        "capsule",
-        help="Capsule management commands"
-    )
-    capsule_subparsers = capsule_parser.add_subparsers(dest="capsule_command", help="Capsule actions")
+    events_parser = subparsers.add_parser("events", help="Show policy events")
+    events_parser.add_argument("--limit", type=int, default=20, help="Number of events to show")
 
-    capsule_subparsers.add_parser("list", help="List all capsules")
-    capsule_show_parser = capsule_subparsers.add_parser("show", help="Show capsule details")
-    capsule_show_parser.add_argument("capsule_id", help="Capsule ID")
+    subparsers.add_parser("export-md", help="Export policy memory to Markdown format")
 
-    # events command
-    events_parser = subparsers.add_parser(
-        "events",
-        help="Show evolution events"
-    )
-    events_parser.add_argument(
-        "--limit",
-        type=int,
-        default=20,
-        help="Number of events to show (default: 20)"
-    )
+    confidence_parser = subparsers.add_parser("confidence-history", help="Show confidence history")
+    confidence_parser.add_argument("--task-type", help="Filter by task type")
 
-    # export-md command
-    subparsers.add_parser(
-        "export-md",
-        help="Export GEP assets to Markdown format"
-    )
+    decision_parser = subparsers.add_parser("decision-history", help="Show recent confirmation decisions")
+    decision_parser.add_argument("--limit", type=int, default=10, help="Number of recent decisions to show")
 
-    # confidence-history command
-    conf_history_parser = subparsers.add_parser(
-        "confidence-history",
-        help="Show confidence history for learned preferences"
-    )
-    conf_history_parser.add_argument(
-        "--task-type",
-        help="Filter by task type (e.g., T1, T2, T3, T4)"
-    )
+    policy_parser = subparsers.add_parser("policy", help="Read-only policy lifecycle operations")
+    policy_subparsers = policy_parser.add_subparsers(dest="policy_command", help="Policy actions")
+    policy_subparsers.add_parser("status", help="Show policy lifecycle status")
+    policy_recent_parser = policy_subparsers.add_parser("recent", help="Show recent lifecycle events")
+    policy_recent_parser.add_argument("--limit", type=int, default=10, help="Number of events to show")
+    policy_subparsers.add_parser("risky", help="Show risky confirmed rules")
+    policy_suspended_parser = policy_subparsers.add_parser("suspended", help="Show suspended rules")
+    policy_suspended_parser.add_argument("--limit", type=int, default=20, help="Number of rules to show")
 
-    # execute-demo command
-    execute_parser = subparsers.add_parser(
-        "execute-demo",
-        help="Demonstrate intelligent confirmation workflow"
-    )
-    execute_parser.add_argument(
-        "--task-type",
-        default="T2",
-        help="Task type (default: T2)"
-    )
-    execute_parser.add_argument(
-        "--description",
-        default="run tests",
-        help="Task description (default: 'run tests')"
-    )
+    execute_parser = subparsers.add_parser("execute-demo", help="Demonstrate confirmation workflow")
+    execute_parser.add_argument("--task-type", default="T2", help="Task type")
+    execute_parser.add_argument("--description", default="run tests", help="Task description")
 
     args = parser.parse_args()
     cli = OpenClawAlignmentCLI()
 
-    # Show version
     if args.version:
         cli.version()
         return
-
-    # Execute command
     if args.command == "init":
-        success = cli.init(
-            target_dir=args.target_dir,
-            force=args.force
-        )
-        exit(0 if success else 1)
-
-    elif args.command == "status":
+        raise SystemExit(0 if cli.init(args.target_dir, args.force) else 1)
+    if args.command == "status":
         cli.status()
-
-    elif args.command == "analyze":
-        # Call the existing analysis flow
+        return
+    if args.command == "analyze":
         from .integration import IntentAlignmentEngine
-        engine = IntentAlignmentEngine(args.repo)
-        engine.run_analysis(args.commits)
 
-    elif args.command == "gene":
-        if args.gene_command == "list":
-            cli.gene_list()
-        elif args.gene_command == "show":
-            cli.gene_show(args.gene_id)
+        IntentAlignmentEngine(args.repo).run_analysis(args.commits)
+        return
+    if args.command == "rule":
+        if args.rule_command == "list":
+            cli.rule_list()
+        elif args.rule_command == "show":
+            cli.rule_show(args.rule_id)
         else:
-            gene_parser.print_help()
-
-    elif args.command == "capsule":
-        if args.capsule_command == "list":
-            cli.capsule_list()
-        elif args.capsule_command == "show":
-            cli.capsule_show(args.capsule_id)
+            rule_parser.print_help()
+        return
+    if args.command == "playbook":
+        if args.playbook_command == "list":
+            cli.playbook_list()
+        elif args.playbook_command == "show":
+            cli.playbook_show(args.playbook_id)
         else:
-            capsule_parser.print_help()
-
-    elif args.command == "events":
+            playbook_parser.print_help()
+        return
+    if args.command == "events":
         cli.events_show(args.limit)
-
-    elif args.command == "export-md":
+        return
+    if args.command == "export-md":
         cli.export_md()
-
-    elif args.command == "confidence-history":
+        return
+    if args.command == "confidence-history":
         cli.confidence_history(args.task_type)
-
-    elif args.command == "execute-demo":
+        return
+    if args.command == "decision-history":
+        cli.decision_history(args.limit)
+        return
+    if args.command == "policy":
+        if args.policy_command == "status":
+            cli.policy_status()
+        elif args.policy_command == "recent":
+            cli.policy_recent(args.limit)
+        elif args.policy_command == "risky":
+            cli.policy_risky()
+        elif args.policy_command == "suspended":
+            cli.policy_suspended(args.limit)
+        else:
+            policy_parser.print_help()
+        return
+    if args.command == "execute-demo":
         cli.execute_demo(args.task_type, args.description)
+        return
 
-    else:
-        # Default behavior: print help
-        parser.print_help()
+    parser.print_help()
 
 
 if __name__ == "__main__":
